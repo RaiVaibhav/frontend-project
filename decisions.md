@@ -167,4 +167,46 @@ Installed Radix UI primitives and Lucide icons in `apps/web`:
 
 - Radix UI primitives will be styled exclusively using our project CSS custom properties in `apps/web/src/styles.css`.
 
+---
+
+## Decision 005: Domain Modeling, Time Seam Architecture & LRC Serialization (Step 1)
+
+- **Commit SHA**: `76a150a2e260907fc29433989c7ce42eaeb384c1` (`76a150a`)
+- **Date**: 2026-10-15
+
+### Context
+
+To avoid scattering time math and loose types across React components, modern frontend engineering requires establishing an authoritative domain model and isolating unit conversion at pure presentation seams. Furthermore, the single units boundary specified in the project rules requires strict differentiation between audio float seconds and segment integer milliseconds.
+
+### Decision
+
+Implemented Step 1 of the vertical slice roadmap:
+1. **Domain Types** ([`apps/web/src/types.ts`](apps/web/src/types.ts)): Defined complete interfaces (`LyricLine`, `AlignmentSegment`, `TrackData`, `PutAlignmentPayload`, `PutAlignmentResponse`, `ConflictErrorBody`, `SelectionState`, `HistorySnapshot`).
+2. **Pure Time Math Module** ([`apps/web/src/utils/time.ts`](apps/web/src/utils/time.ts)):
+   - `formatTime`: Converts integer ms to `M:SS.mmm`.
+   - `formatTimeShort`: Converts integer ms to `M:SS` for timeline rulers.
+   - `parseTimeToMs`: Flexible parser for user manual inputs (`M:SS.mmm`, `M:SS`, `SS.mmm`).
+   - `clampSegment`: Clamps segment ranges within `[0, maxDurationMs]` respecting `minLengthMs`.
+   - `nudgeSegments`: Pure multi-segment shifting utility that offsets selected segments by `deltaMs` while strictly respecting timeline boundaries.
+3. **LRC Export & Parser** ([`apps/web/src/utils/lrc.ts`](apps/web/src/utils/lrc.ts)):
+   - `exportLrc`: Generates standard `[mm:ss.xx]` synchronized lyric files with header metadata.
+   - `parseLrc`: Parses imported `.lrc` files into timed line structures.
+4. **Unit Test Harness with Vitest** ([`time.test.ts`](apps/web/src/utils/time.test.ts), [`lrc.test.ts`](apps/web/src/utils/lrc.test.ts)): Installed Vitest 2.x and established 10 unit tests covering edge cases.
+
+### Rationale & Trade-offs
+
+- **Zero Leakage of Time Conversions**: Pure utility functions guarantee that components never perform ad-hoc `Math.round(sec * 1000)` or string manipulation inline.
+- **TDD Safety Net**: Unit tests immediately exposed and fixed a boundary edge case in `clampSegment` before it could ever hit UI code.
+- **Trade-off**: Added Vitest as a devDependency in `apps/web` to provide sub-second unit test execution for pure algorithmic logic without incurring Playwright browser startup overhead.
+
+### Alternatives Rejected
+
+- **Using Date or moment/dayjs**: Rejected because audio timestamps represent relative elapsed offsets rather than calendar dates; native integer millisecond arithmetic is faster, zero-dependency, and exact.
+- **Relying solely on Playwright E2E for unit math**: Rejected because spinning up Chromium for basic string formatting and clamping tests slows the developer feedback loop from ~280ms to several seconds.
+
+### Assumptions
+
+- The minimum segment duration is set to 200ms (`minLengthMs = 200`) to prevent zero-width or unclickable timeline blocks.
+
+
 
