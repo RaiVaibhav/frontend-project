@@ -43,3 +43,39 @@ Curated and installed 10 highly relevant skills into `.agents/skills/`:
 
 ### Assumptions
 - The Antigravity agent discovers workspace skills located under `.agents/skills/<skill-name>/SKILL.md` as specified in the customization guide.
+
+---
+
+## Decision 002: Streamlining Agent Skills by Removing Issue-Tracker Dependencies
+
+- **Commit SHA**: `ec50cac81ad1db91264dd8b95fbce261e4efc3ee` (`ec50cac`)
+- **Date**: 2026-10-15
+
+### Context
+Upon reviewing the installed skills and the project scope, several skills (`to-tickets`, `to-spec`, and `implement`) presupposed an external multi-developer issue-tracker environment (e.g., GitHub/GitLab issues with `ready-for-agent` triage labels and ticket-deconstruction ceremonies). The take-home task requires fast, cohesive frontend development guided directly by vertical architectural slices documented in `decisions.md`.
+
+### Decision
+Pruned `.agents/skills/` to remove:
+1. `to-tickets`: Ticket generation for external issue trackers.
+2. `to-spec`: Issue-tracker specification generation and label publishing.
+3. `implement`: Ticket-by-ticket orchestrator geared towards external issue trackers.
+
+Retained the core engineering and design skills:
+- `tdd`: Red-green-refactor for pure algorithmic logic (time math, collision clamping, LRC export).
+- `codebase-design`: Clean, deep module boundaries (audio engine, state store, canvas renderer, UI).
+- `diagnosing-bugs`: Systematic debugging for browser audio sync and Web Audio APIs.
+- `prototype`: Rapid UI and interaction throwaway testing.
+- `grilling` / `grill-me`: Rigorous design review and assumption stress-testing.
+- `code-review`: Two-axis verification against repo standards and spec requirements.
+
+### Rationale & Trade-offs
+- **Zero Process Overhead**: Eliminates ticket file clutter and bureaucratic ceremonies that slow down pair programming.
+- **Tighter Feedback Loop**: Aligns our development process directly with the repository's `decisions.md` requirement—each architectural or interaction choice is made, implemented, committed, and logged in real-time.
+- **Trade-off**: Without `to-tickets`, tracking is maintained via atomic git commits and `decisions.md` entries rather than standalone markdown ticket artifacts.
+
+### Alternatives Rejected
+- **Keeping `to-tickets` and `to-spec`**: Rejected because creating simulated issue tracker tickets adds administrative noise without adding value to the candidate submission or grader review.
+
+### Assumptions
+- Development proceeds via feature/architectural slices committed incrementally with corresponding `decisions.md` entries.
+
