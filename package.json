@@ -13,6 +13,7 @@
     "build": "pnpm --filter @fixture/web run build",
     "typecheck": "pnpm --filter @fixture/web run typecheck",
     "test": "playwright test",
+    "test:unit": "pnpm --filter @fixture/web run test",
     "test:ui": "playwright test --ui",
     "postinstall": "node scripts/postinstall.mjs"
   },
