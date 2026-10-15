@@ -130,3 +130,41 @@ Created [`.agents/AGENTS.md`](.agents/AGENTS.md) defining strict engineering sta
 
 - `.agents/AGENTS.md` is loaded by the agent as the authoritative workspace instructions document per Antigravity customization specifications.
 
+---
+
+## Decision 004: UI Component Architecture with Radix UI Primitives & Lucide Icons (React 18)
+
+- **Commit SHA**: `2488bdbdf7ef20ad2c286d99ef835ddc7b275bf1` (`2488bdb`)
+- **Date**: 2026-10-15
+
+### Context
+
+To build an accessible, responsive, and tactile audio alignment interface (dialogs for song loading, timeline zoom sliders, tooltips for keyboard shortcuts, context menus for segment operations) without library bloat or conflicting CSS frameworks, we require headless primitives that adhere strictly to React 18 without requiring a framework version bump.
+
+### Decision
+
+Installed Radix UI primitives and Lucide icons in `apps/web`:
+- `@radix-ui/react-dialog` (`^1.3.1`): For accessible "Load Song / Bring Your Own Track" modals.
+- `@radix-ui/react-slider` (`^1.6.1`): For smooth timeline zoom, scrub control, and playback volume.
+- `@radix-ui/react-tooltip` (`^1.4.1`): For keyboard shortcut discoverability (e.g., `Space: Play/Pause`, `Enter: Stamp`).
+- `@radix-ui/react-dropdown-menu` (`^2.2.1`): For contextual segment and export actions.
+- `lucide-react` (`^1.57.0`): Clean, consistent SVG icon set for audio transport and editing controls.
+
+### Rationale & Trade-offs
+
+- **Headless & Flexible**: Radix UI primitives provide fully accessible WAI-ARIA compliant state and keyboard navigation while leaving 100% of the styling to our CSS design system.
+- **Zero Style Pollution**: Avoids heavy, opinionated CSS frameworks that clash with our sleek custom property theme or cause specificity wars.
+- **React 18 Stability**: Maintains full compatibility with the existing React 18 setup without forcing unnecessary React 19 / framework migration steps.
+- **Trade-off**: Requires writing custom CSS for the dialog, slider, and tooltip components rather than using pre-baked component themes.
+
+### Alternatives Rejected
+
+- **Material UI (MUI) / Ant Design**: Rejected due to bundle weight, rigid runtime CSS-in-JS overhead, and potential performance impact during high-frequency audio playback.
+- **Upgrading to React 19**: Rejected because the assignment scaffold is pinned to React 18.3.1; keeping dependencies stable reduces upgrade churn and potential compatibility risks with test harnesses.
+- **Building accessible modal and slider primitives from scratch**: Rejected because edge cases (focus trapping, screen readers, keyboard navigation, portal management) are already solved and hardened in Radix UI.
+
+### Assumptions
+
+- Radix UI primitives will be styled exclusively using our project CSS custom properties in `apps/web/src/styles.css`.
+
+
