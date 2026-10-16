@@ -371,7 +371,7 @@ export default function App() {
                     interchangeSegments(lineId, targetSeg.line_id);
                   } else {
                     const otherSegments = alignmentState.segments.filter((s) => s.line_id !== lineId);
-                    const fitted = fitDroppedSegment(otherSegments, dropMs, durationMs, 3500);
+                    const fitted = fitDroppedSegment(otherSegments, dropMs, durationMs, 4500, 500);
                     if (fitted) {
                       setSegment(lineId, fitted.start_ms, fitted.end_ms, durationMs);
                       handleSelectLine(lineId, false);

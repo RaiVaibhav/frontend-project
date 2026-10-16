@@ -346,6 +346,7 @@ export function SegmentLane({
               top: '4px',
               left: `${bounds.leftPx}px`,
               width: `${bounds.widthPx}px`,
+              minWidth: '72px',
               height: `${height - 10}px`,
               background: isInterchangeTarget
                 ? 'rgba(99, 185, 140, 0.55)'

@@ -7,25 +7,29 @@ export interface SegmentBounds {
 
 /**
  * Calculates pixel left and width for a segment block on the timeline.
- * Ensures a minimum visible width (16px) for ease of selection and trimming.
+ * Ensures a generous minimum visible width (72px) so that trim handles (20px total)
+ * never squeeze or eclipse the lyric text content.
  */
 export function calculateSegmentBounds(
   segment: AlignmentSegment,
   durationSeconds: number,
   totalWidth: number,
-  minBlockWidthPx = 16
+  minBlockWidthPx = 72
 ): SegmentBounds {
   if (durationSeconds <= 0 || totalWidth <= 0) {
-    return { leftPx: 0, widthPx: minBlockWidthPx };
+    return { leftPx: 0, widthPx: Math.max(1, minBlockWidthPx) };
   }
 
   const durationMs = durationSeconds * 1000;
   const leftPx = (segment.start_ms / durationMs) * totalWidth;
   const naturalWidth = ((segment.end_ms - segment.start_ms) / durationMs) * totalWidth;
 
+  const widthPx = Math.max(minBlockWidthPx, naturalWidth);
+  const clampedLeftPx = Math.max(0, Math.min(leftPx, Math.max(0, totalWidth - widthPx)));
+
   return {
-    leftPx: Math.max(0, Math.min(leftPx, totalWidth)),
-    widthPx: Math.max(minBlockWidthPx, naturalWidth),
+    leftPx: clampedLeftPx,
+    widthPx: Math.min(widthPx, totalWidth),
   };
 }
 
@@ -132,13 +136,15 @@ export function getLineIdRange(lines: LyricLine[], fromLineId: string, toLineId:
 /**
  * Calculates a valid non-overlapping [start_ms, end_ms] when dropping a line onto the timeline at targetMs.
  * Finds the best viable gap between existing segments to strictly prevent any collision or overlap.
+ * Guarantees a healthy duration (preferred 4000ms, min 500ms) and automatically shifts start
+ * left if needed to prevent squishing when dropped near the end of a gap.
  */
 export function fitDroppedSegment(
   existingSegments: AlignmentSegment[],
   targetMs: number,
   maxDurationMs: number,
-  preferredDurationMs = 3500,
-  minLengthMs = 200
+  preferredDurationMs = 4000,
+  minLengthMs = 500
 ): { start_ms: number; end_ms: number } | null {
   const sorted = [...existingSegments].sort((a, b) => a.start_ms - b.start_ms);
 
@@ -163,15 +169,11 @@ export function fitDroppedSegment(
   // 1. Check if targetMs falls directly inside a viable gap
   const containingGap = viableGaps.find((g) => targetMs >= g.start && targetMs < g.end);
   if (containingGap) {
-    const availableMs = containingGap.end - targetMs;
-    if (availableMs >= minLengthMs) {
-      const duration = Math.min(preferredDurationMs, availableMs);
-      return { start_ms: targetMs, end_ms: targetMs + duration };
-    } else {
-      // Shift start left so that end fits at containingGap.end
-      const start = Math.max(containingGap.start, containingGap.end - minLengthMs);
-      return { start_ms: start, end_ms: containingGap.end };
-    }
+    const gapLength = containingGap.end - containingGap.start;
+    const duration = Math.min(preferredDurationMs, gapLength);
+    // If placing from targetMs would extend past the gap end, shift start left to preserve duration
+    const start = Math.max(containingGap.start, Math.min(targetMs, containingGap.end - duration));
+    return { start_ms: start, end_ms: start + duration };
   }
 
   // 2. If targetMs lands inside an existing segment, find the closest viable gap
@@ -187,8 +189,12 @@ export function fitDroppedSegment(
     }
   }
 
-  const start = targetMs < bestGap.start ? bestGap.start : Math.max(bestGap.start, bestGap.end - preferredDurationMs);
-  const duration = Math.min(preferredDurationMs, bestGap.end - start);
+  const gapLength = bestGap.end - bestGap.start;
+  const duration = Math.min(preferredDurationMs, gapLength);
+  const start = targetMs < bestGap.start
+    ? bestGap.start
+    : Math.max(bestGap.start, bestGap.end - duration);
+
   return { start_ms: start, end_ms: start + duration };
 }
 

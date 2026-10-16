@@ -25,7 +25,7 @@ describe('segmentUtils', () => {
     it('enforces a minimum visible pixel width', () => {
       const seg = { line_id: '2', start_ms: 5000, end_ms: 5100 }; // 100ms = 1px
       const bounds = calculateSegmentBounds(seg, durationSeconds, totalWidth);
-      expect(bounds.widthPx).toBeGreaterThanOrEqual(16); // Minimum clickable block width
+      expect(bounds.widthPx).toBeGreaterThanOrEqual(72); // Generous minimum visible width for handles and text
     });
   });
 
@@ -101,9 +101,9 @@ describe('segmentUtils', () => {
         { line_id: 'l3', start_ms: 8000, end_ms: 12000 },
       ];
 
-      // Dropping at 5000ms: fits cleanly between 4000 and 8000
+      // Dropping at 5000ms in [4000, 8000] gap: shifts start left to 4500 to preserve full 3500ms duration
       const placed = fitDroppedSegment(existing, 5000, 30000, 3500);
-      expect(placed).toEqual({ start_ms: 5000, end_ms: 8000 }); // clamped by neighbor at 8000
+      expect(placed).toEqual({ start_ms: 4500, end_ms: 8000 });
     });
 
     it('relocates to nearest gap if dropped directly inside an existing segment', () => {
