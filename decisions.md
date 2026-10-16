@@ -437,6 +437,57 @@ Mounted the audio and waveform subsystems into [`apps/web/src/App.tsx`](apps/web
 
 - The backend serves audio files with byte-range and CORS support, enabling `decodeAudioData` in the browser.
 
+---
+
+## Decision 012: Alignment State Management with `alignmentReducer` & Undo/Redo (Micro-Step 3A)
+
+- **Commit SHA**: `2e951c6e14b0b8c6e2bb7a88e99ef3f80c653ceb` (`2e951c6`)
+- **Date**: 2026-10-16
+
+### Context
+
+Managing lyric lines and alignment segments requires handling complex user interactions: placing segments onto the timeline, adjusting start/end boundaries, nudging multiple segments together, splitting or merging lines, maintaining selection states, and supporting undo/redo. Furthermore, the API contract requires tracking server `version` and gracefully handling `409 Conflict` errors via state reconciliation. Scattering this state across components creates synchronization bugs; a centralized, pure state machine is needed.
+
+### Decision
+
+Implemented [`apps/web/src/store/alignmentReducer.ts`](apps/web/src/store/alignmentReducer.ts) and [`apps/web/src/store/useAlignmentStore.ts`](apps/web/src/store/useAlignmentStore.ts):
+1. **Pure Reducer State Model**:
+   - `lines: LyricLine[]`: The ordered list of lyric lines with their text and line indices.
+   - `segments: AlignmentSegment[]`: Time-stamped segments (`line_id`, `start_ms`, `end_ms`).
+   - `version: number`: The optimistic concurrency version matching the server API.
+   - `selectedLineIds: Set<string>`: Set of selected line identifiers for single- or multi-select operations.
+   - `history: { past: StateSnapshot[]; future: StateSnapshot[] }`: Immutable undo/redo stacks capped at 50 snapshots.
+2. **Action Handlers**:
+   - `INIT`: Populates initial lines, segments, and version.
+   - `SET_LINES` / `REORDER_LINES`: Updates or reorders lines and updates zero-based line indices.
+   - `SET_SEGMENT`: Creates or updates a segment, enforcing `clampSegment` boundaries.
+   - `DELETE_SEGMENT`: Removes a timing segment while keeping the lyric line.
+   - `NUDGE_SELECTED`: Offsets all currently selected segments forward or backward by `deltaMs`.
+   - `SPLIT_SEGMENT`: Splits a single line and its timing into two sequential lines.
+   - `MERGE_WITH_NEXT`: Merges a line with the adjacent subsequent line and combines timing boundaries.
+   - `SELECT_LINE` / `SELECT_MULTIPLE` / `CLEAR_SELECTION`: Flexible selection management with multi-select toggle.
+   - `UNDO` / `REDO`: Rolls back or steps forward through historical state snapshots.
+   - `RECONCILE_CONFLICT`: Incorporates incoming server lines, segments, and version upon HTTP 409.
+3. **Unit Tests with Vitest** ([`apps/web/src/store/alignmentReducer.test.ts`](apps/web/src/store/alignmentReducer.test.ts)):
+   - 7 unit tests verifying state initialization, segment clamping, undo/redo cycles, multi-segment nudging, line split, line merge, and line reordering.
+
+### Rationale & Trade-offs
+
+- **Zero External Dependencies**: Implemented using React's native `useReducer` and TypeScript instead of adding third-party state managers (Redux, Zustand, MobX), avoiding dependency bloat.
+- **Pure Testability**: Because the reducer is 100% pure TypeScript without DOM or React hooks, all mutations and edge cases execute in Vitest in under 30ms.
+- **Linear Undo/Redo**: Snapshotting line and segment arrays enables flawless undo/redo for all editing operations.
+- **Trade-off**: Capped undo history at 50 snapshots to prevent memory overhead during extended alignment sessions.
+
+### Alternatives Rejected
+
+- **Zustand / Redux Toolkit**: Rejected because native `useReducer` provides identical ergonomics for local document editing with zero bundle weight and full type safety.
+- **Component-level local state**: Rejected because synchronizing selection, timeline blocks, lyrics lists, keyboard shortcuts, and export actions across separate component trees would introduce race conditions and state fragmentation.
+
+### Assumptions
+
+- Lyric lines and segments maintain referential mapping via immutable `line_id` strings.
+
+
 
 
 
