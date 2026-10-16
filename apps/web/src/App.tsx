@@ -8,6 +8,7 @@ import { WaveformCanvas } from "./audio/WaveformCanvas";
 import { TimeClock } from "./audio/TimeClock";
 import { useAlignmentStore } from "./store/useAlignmentStore";
 import { LyricsList } from "./lyrics/LyricsList";
+import { SegmentLane } from "./audio/SegmentLane";
 
 export default function App() {
   const [track, setTrack] = useState<TrackData | null>(null);
@@ -23,6 +24,7 @@ export default function App() {
     canRedo,
     init,
     selectLine,
+    setSegment,
     deleteSegment,
     undo,
     redo,
@@ -332,12 +334,34 @@ export default function App() {
                 peaks={peaks}
                 durationSeconds={track.duration_seconds}
                 controller={controller}
-                height={160}
-              />
+                height={190}
+                segmentLaneHeight={52}
+              >
+                {(totalWidth) => (
+                  <SegmentLane
+                    segments={alignmentState.segments}
+                    lines={alignmentState.lines}
+                    durationSeconds={track.duration_seconds}
+                    totalWidth={totalWidth}
+                    selectedLineIds={alignmentState.selectedLineIds}
+                    onSelectLine={selectLine}
+                    onUpdateSegment={(lineId, startMs, endMs) =>
+                      setSegment(
+                        lineId,
+                        startMs,
+                        endMs,
+                        Math.round(track.duration_seconds * 1000),
+                      )
+                    }
+                    onSeekToTime={(timeSec) => controller.seek(timeSec)}
+                    height={52}
+                  />
+                )}
+              </WaveformCanvas>
             ) : (
               <div
                 style={{
-                  height: "160px",
+                  height: "190px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -358,4 +382,3 @@ export default function App() {
     </div>
   );
 }
-

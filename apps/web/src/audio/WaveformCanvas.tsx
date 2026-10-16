@@ -8,7 +8,8 @@ export interface WaveformCanvasProps {
   controller: AudioController;
   zoom?: number;
   height?: number;
-  children?: React.ReactNode;
+  segmentLaneHeight?: number;
+  children?: React.ReactNode | ((totalWidth: number) => React.ReactNode);
 }
 
 export function WaveformCanvas({
@@ -16,7 +17,8 @@ export function WaveformCanvas({
   durationSeconds,
   controller,
   zoom = 1,
-  height = 160,
+  height = 190,
+  segmentLaneHeight = 50,
   children,
 }: WaveformCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -47,7 +49,8 @@ export function WaveformCanvas({
 
   const totalWidth = Math.max(containerWidth, Math.floor(containerWidth * zoom));
   const rulerHeight = 24;
-  const waveformHeight = height - rulerHeight;
+  const laneH = segmentLaneHeight ?? 0;
+  const waveformHeight = Math.max(40, height - rulerHeight - laneH);
 
   // 1. Draw static waveform peaks onto Canvas
   useEffect(() => {
@@ -110,7 +113,20 @@ export function WaveformCanvas({
         : ctx.rect(x, centerY - barH / 2, barWidth, barH);
       ctx.fill();
     }
-  }, [peaks, durationSeconds, totalWidth, height, rulerHeight, waveformHeight]);
+
+    // Draw subtle track separator and lane background for segment lane
+    if (laneH > 0) {
+      ctx.strokeStyle = 'rgba(128, 128, 128, 0.2)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, rulerHeight + waveformHeight);
+      ctx.lineTo(totalWidth, rulerHeight + waveformHeight);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(128, 128, 128, 0.04)';
+      ctx.fillRect(0, rulerHeight + waveformHeight, totalWidth, laneH);
+    }
+  }, [peaks, durationSeconds, totalWidth, height, rulerHeight, waveformHeight, laneH]);
 
   // 2. Hardware-accelerated playhead needle: Subscribes directly to 60fps audio ticks
   useEffect(() => {
@@ -217,7 +233,7 @@ export function WaveformCanvas({
         </div>
 
         {/* Child overlay slots (e.g. Segment Lane blocks) */}
-        {children}
+        {typeof children === 'function' ? children(totalWidth) : children}
       </div>
     </div>
   );
