@@ -621,6 +621,63 @@ Implemented full sidebar ingestion and timeline drag-and-drop:
 
 - Pasted lyrics contain one lyric line per line break.
 
+---
+
+## Decision 016: Timeline Collision Prevention, Verse Shift-Selection, Dynamic Add-Line, and Segment Lane Expansion
+
+- **Commit SHA**: `81972134a6ef2f3274296767667bfeb75ca0a133` (`8197213`)
+- **Date**: 2026-10-16
+
+### Context
+
+During manual and wireframe alignment testing, several UX bugs and wireframe discrepancies were identified:
+1. Adding a new line from the left sidebar ingestion box repeatedly displayed `"New lyric line"` regardless of what the user entered.
+2. In the timeline segment lane, segments were able to overlap each other during trimming, dragging, or dropping, violating music alignment continuity rules.
+3. Users lacked the ability to shift-select an entire verse (range of lines/segments) and drag the verse as a unified block.
+4. The timeline segment lane height was too cramped for comfortable trimming and grabbing.
+5. The `01, 02, 03...` line index badges in the left sidebar cluttered the view and deviated from the wireframe design.
+
+### Decision
+
+Implemented a comprehensive suite of fixes and wireframe enhancements:
+
+1. **Dynamic Line Ingestion** ([`apps/web/src/lyrics/LyricsList.tsx`](apps/web/src/lyrics/LyricsList.tsx)):
+   - Replaced hardcoded default string with `pastedText.trim()`, allowing custom line creation from the textarea.
+   - Added `onKeyDown` shortcut to allow submitting a line with `Enter` (without `Shift`).
+   - Cleaned up line card presentation by removing the `01, 02, 03...` numeric index badges from both the sidebar and segment blocks.
+
+2. **Strict Timeline Collision Prevention** ([`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUtils.ts), [`apps/web/src/utils/time.ts`](apps/web/src/utils/time.ts)):
+   - Left edge trimming (`dragTrimLeft`): Clamped to `prevSegmentEndMs`, preventing back-trimming across preceding segments.
+   - Right edge trimming (`dragTrimRight`): Clamped to `nextSegmentStartMs`, preventing forward-trimming across following segments.
+   - Single segment dragging (`dragShiftSegment`): Bounded between `[prevSegmentEndMs, nextSegmentStartMs]`.
+   - Multi-segment group dragging (`nudgeSegments`): Added collision detection against unselected neighbor segments so shifting a verse never overlaps preceding or succeeding unselected blocks.
+   - Collision-free drop placement (`fitDroppedSegment`): Automatically calculates non-overlapping bounds within available timeline gaps when lines are dropped from the sidebar.
+
+3. **Verse Shift-Selection & Group Drag** ([`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx), [`apps/web/src/App.tsx`](apps/web/src/App.tsx)):
+   - Implemented `getLineIdRange` and `anchorLineIdRef` to support standard OS-style Shift-click range selection across lines and segments.
+   - Rendered the wireframe dashed multi-selection grouping box (`"N segments selected"`) with subtle border styling.
+   - Dragging any segment inside the active multi-selection shifts all selected segments together via `nudgeSelected`.
+
+4. **Expanded Segment Lane Height**:
+   - Increased `segmentLaneHeight` to `68px` (overall canvas height `220px`), providing ample room for 20px trim grips and legible lyric text.
+
+5. **Unit Tests with Vitest** ([`apps/web/src/audio/segmentUtils.test.ts`](apps/web/src/audio/segmentUtils.test.ts), [`apps/web/src/utils/time.test.ts`](apps/web/src/utils/time.test.ts)):
+   - Added unit tests for `getLineIdRange`, `fitDroppedSegment`, and collision-bounded `nudgeSegments` (expanding suite to 51 passing tests).
+
+### Rationale & Trade-offs
+
+- **Strict Boundary Invariants vs. Overlapping Tolerance**: Audio lyrics alignment is strictly sequential and non-overlapping. Enforcing collision clamping at the calculation seam prevents invalid time states before they ever reach the state machine.
+- **Unified Shift-Selection**: Supporting Shift-click in both the left sidebar and timeline allows users to naturally group verses from either perspective.
+- **Trade-off**: Dropping a line into a narrow gap between two existing segments truncates the initial duration to fit the gap (with a 200ms minimum threshold).
+
+### Alternatives Rejected
+
+- **Allowing segments to overlap on different vertical sub-lanes**: Rejected because standard lyric alignment (and `.lrc` format) is strictly linear; multi-lane tracks complicate scrubbing and export.
+
+### Assumptions
+
+- Lyric lines in a song occur sequentially without concurrent overlapping voices on the primary track.
+
 
 
 
