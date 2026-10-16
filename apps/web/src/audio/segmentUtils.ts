@@ -14,7 +14,7 @@ export function calculateSegmentBounds(
   segment: AlignmentSegment,
   durationSeconds: number,
   totalWidth: number,
-  minBlockWidthPx = 72
+  minBlockWidthPx = 28
 ): SegmentBounds {
   if (durationSeconds <= 0 || totalWidth <= 0) {
     return { leftPx: 0, widthPx: Math.max(1, minBlockWidthPx) };
@@ -219,7 +219,7 @@ export function findInterchangeTarget(
     const durationMs = durationSeconds * 1000;
     const draggedLeftPx = (currentStartMs / durationMs) * totalWidth;
     const naturalWidthPx = ((currentEndMs - currentStartMs) / durationMs) * totalWidth;
-    const draggedWidthPx = Math.max(72, naturalWidthPx);
+    const draggedWidthPx = Math.max(28, naturalWidthPx);
     const draggedRightPx = draggedLeftPx + draggedWidthPx;
     const draggedCenterPx = draggedLeftPx + draggedWidthPx / 2;
 

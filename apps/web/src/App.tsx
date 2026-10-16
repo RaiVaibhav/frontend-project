@@ -33,6 +33,7 @@ export default function App() {
     deleteSegment,
     nudgeSelected,
     interchangeSegments,
+    interchangeGroup,
     undo,
     redo,
   } = useAlignmentStore();
@@ -397,6 +398,7 @@ export default function App() {
                       )
                     }
                     onInterchangeSegments={interchangeSegments}
+                    onInterchangeGroup={interchangeGroup}
                     onNudgeSelected={(deltaMs) =>
                       nudgeSelected(
                         deltaMs,

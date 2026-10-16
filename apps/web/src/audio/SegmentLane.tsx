@@ -21,6 +21,7 @@ export interface SegmentLaneProps {
   onSelectRange?: (lineId: string) => void;
   onUpdateSegment: (lineId: string, startMs: number, endMs: number) => void;
   onInterchangeSegments?: (sourceLineId: string, targetLineId: string) => void;
+  onInterchangeGroup?: (sourceLineIds: string[], targetLineId: string) => void;
   onNudgeSelected?: (deltaMs: number) => void;
   onSeekToTime?: (timeSeconds: number) => void;
   height?: number;
@@ -36,11 +37,13 @@ export function SegmentLane({
   onSelectRange,
   onUpdateSegment,
   onInterchangeSegments,
+  onInterchangeGroup,
   onNudgeSelected,
   onSeekToTime,
   height = 68,
 }: SegmentLaneProps) {
   const [activeDrag, setActiveDrag] = useState<{
+    isMulti: boolean;
     lineId: string;
     shiftPx: number;
     targetInterchangeId: string | null;
@@ -103,19 +106,22 @@ export function SegmentLane({
     if (selectedLineIds.size <= 1) return null;
     const selectedSegs = segments.filter((s) => selectedLineIds.has(s.line_id));
     if (selectedSegs.length <= 1) return null;
+    if (durationSeconds <= 0 || totalWidth <= 0) return null;
 
-    let minStart = Infinity;
-    let maxEnd = -Infinity;
+    let minLeftPx = Infinity;
+    let maxRightPx = -Infinity;
+
     for (const s of selectedSegs) {
-      if (s.start_ms < minStart) minStart = s.start_ms;
-      if (s.end_ms > maxEnd) maxEnd = s.end_ms;
+      const b = calculateSegmentBounds(s, durationSeconds, totalWidth);
+      if (b.leftPx < minLeftPx) minLeftPx = b.leftPx;
+      const right = b.leftPx + b.widthPx;
+      if (right > maxRightPx) maxRightPx = right;
     }
 
-    if (minStart === Infinity || durationSeconds <= 0 || totalWidth <= 0) return null;
+    if (minLeftPx === Infinity || maxRightPx === -Infinity) return null;
 
-    const durationMs = durationSeconds * 1000;
-    const leftPx = (minStart / durationMs) * totalWidth;
-    const widthPx = ((maxEnd - minStart) / durationMs) * totalWidth;
+    const leftPx = minLeftPx;
+    const widthPx = maxRightPx - minLeftPx;
 
     return { leftPx, widthPx, count: selectedSegs.length };
   }, [selectedLineIds, segments, durationSeconds, totalWidth]);
@@ -145,6 +151,12 @@ export function SegmentLane({
             borderRadius: 'var(--radius)',
             pointerEvents: 'none',
             boxSizing: 'border-box',
+            transform:
+              activeDrag?.isMulti && activeDrag.shiftPx
+                ? `translate3d(${activeDrag.shiftPx}px, 0, 0)`
+                : 'none',
+            zIndex: 18,
+            transition: activeDrag?.isMulti ? 'none' : 'transform 0.1s ease',
           }}
         >
           <span
@@ -220,26 +232,48 @@ export function SegmentLane({
 
         const handleBodyDragStart = (e: React.MouseEvent) => {
           document.body.style.cursor = 'grabbing';
+          const isMulti = selectedLineIds.size > 1 && selectedLineIds.has(segment.line_id);
           const initialStart = segment.start_ms;
           const initialEnd = segment.end_ms;
           const segmentLength = initialEnd - initialStart;
-          let lastShiftMs = 0;
           let currentTargetId: string | null = null;
           let lastDeltaX = 0;
+
+          const selectedSegs = segments.filter((s) => selectedLineIds.has(s.line_id));
+          const unselectedSegs = segments.filter((s) => !selectedLineIds.has(s.line_id));
+          const groupMinStart =
+            selectedSegs.length > 0 ? Math.min(...selectedSegs.map((s) => s.start_ms)) : initialStart;
+          const groupMaxEnd =
+            selectedSegs.length > 0 ? Math.max(...selectedSegs.map((s) => s.end_ms)) : initialEnd;
 
           startDrag(
             e,
             (deltaX) => {
               lastDeltaX = deltaX;
-              // If multiple segments are selected, offset the whole group together!
-              if (selectedLineIds.size > 1 && selectedLineIds.has(segment.line_id) && onNudgeSelected) {
-                const msPerPixel = (durationSeconds * 1000) / totalWidth;
-                const currentShiftMs = Math.round(deltaX * msPerPixel);
-                const stepDelta = currentShiftMs - lastShiftMs;
-                if (Math.abs(stepDelta) >= 10) {
-                  lastShiftMs = currentShiftMs;
-                  onNudgeSelected(stepDelta);
-                }
+              const msPerPixel = (durationSeconds * 1000) / totalWidth;
+              const deltaMs = Math.round(deltaX * msPerPixel);
+
+              if (isMulti) {
+                // Multi-verse drag: compute prospective group span
+                const prospectiveGroupStart = groupMinStart + deltaMs;
+                const prospectiveGroupEnd = groupMaxEnd + deltaMs;
+
+                // Detect interchange target among unselected segments
+                const target = findInterchangeTarget(
+                  unselectedSegs,
+                  prospectiveGroupStart,
+                  prospectiveGroupEnd,
+                  durationSeconds,
+                  totalWidth
+                );
+                currentTargetId = target ? target.line_id : null;
+
+                setActiveDrag({
+                  isMulti: true,
+                  lineId: segment.line_id,
+                  shiftPx: deltaX,
+                  targetInterchangeId: currentTargetId,
+                });
                 return;
               }
 
@@ -264,6 +298,7 @@ export function SegmentLane({
               currentTargetId = target ? target.line_id : null;
 
               setActiveDrag({
+                isMulti: false,
                 lineId: segment.line_id,
                 shiftPx: deltaX,
                 targetInterchangeId: currentTargetId,
@@ -282,9 +317,20 @@ export function SegmentLane({
               }
 
               // Drag completed:
-              if (selectedLineIds.size <= 1 || !selectedLineIds.has(segment.line_id)) {
+              if (isMulti) {
+                if (currentTargetId && onInterchangeGroup) {
+                  // Multi-verse interchanged with target segment!
+                  onInterchangeGroup(Array.from(selectedLineIds), currentTargetId);
+                } else if (lastDeltaX !== 0 && onNudgeSelected) {
+                  const msPerPixel = (durationSeconds * 1000) / totalWidth;
+                  const finalDeltaMs = Math.round(lastDeltaX * msPerPixel);
+                  if (finalDeltaMs !== 0) {
+                    onNudgeSelected(finalDeltaMs);
+                  }
+                }
+              } else {
                 if (currentTargetId && onInterchangeSegments) {
-                  // Interchanged with another segment!
+                  // Single segment interchanged with another segment!
                   onInterchangeSegments(segment.line_id, currentTargetId);
                 } else if (lastDeltaX !== 0) {
                   // Dropped in open space: place cleanly into gap without overlap
@@ -311,7 +357,10 @@ export function SegmentLane({
           );
         };
 
-        const isBeingDragged = activeDrag?.lineId === segment.line_id;
+        const isBeingDragged =
+          activeDrag &&
+          ((activeDrag.isMulti && selectedLineIds.has(segment.line_id)) ||
+            (!activeDrag.isMulti && activeDrag.lineId === segment.line_id));
         const isInterchangeTarget =
           activeDrag?.targetInterchangeId === segment.line_id || html5DragTargetId === segment.line_id;
 
@@ -352,7 +401,7 @@ export function SegmentLane({
               top: '4px',
               left: `${bounds.leftPx}px`,
               width: `${bounds.widthPx}px`,
-              minWidth: '72px',
+              minWidth: '28px',
               height: `${height - 10}px`,
               background: isInterchangeTarget
                 ? 'rgba(99, 185, 140, 0.55)'
@@ -377,7 +426,7 @@ export function SegmentLane({
                 : isSelected
                 ? '0 0 10px rgba(99, 185, 140, 0.4)'
                 : 'none',
-              transform: isBeingDragged ? `translate3d(${activeDrag.shiftPx}px, 0, 0)` : 'none',
+              transform: isBeingDragged && activeDrag ? `translate3d(${activeDrag.shiftPx}px, 0, 0)` : 'none',
               zIndex: isBeingDragged ? 20 : isInterchangeTarget ? 15 : 2,
               transition: isBeingDragged ? 'none' : 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
               overflow: 'visible',
@@ -407,7 +456,7 @@ export function SegmentLane({
                 }}
               >
                 <ArrowLeftRight size={11} />
-                <span>Interchange</span>
+                <span>Interchange{activeDrag?.isMulti ? ' Verse' : ''}</span>
               </div>
             )}
             {/* Left Trim Handle */}

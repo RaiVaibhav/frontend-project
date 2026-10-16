@@ -26,6 +26,7 @@ export type AlignmentAction =
   | { type: 'DELETE_SEGMENT'; payload: { line_id: string } }
   | { type: 'NUDGE_SELECTED'; payload: { deltaMs: number; maxDurationMs: number } }
   | { type: 'INTERCHANGE_SEGMENTS'; payload: { sourceLineId: string; targetLineId: string } }
+  | { type: 'INTERCHANGE_GROUP'; payload: { sourceLineIds: string[]; targetLineId: string } }
   | { type: 'SPLIT_SEGMENT'; payload: { line_id: string; splitTextFirst: string; splitTextSecond: string; splitTimeMs: number } }
   | { type: 'MERGE_WITH_NEXT'; payload: { line_id: string } }
   | { type: 'SELECT_LINE'; payload: { line_id: string; isMulti: boolean } }
@@ -212,6 +213,52 @@ export function alignmentReducer(state: AlignmentState, action: AlignmentAction)
         ...state,
         segments: updatedSegments,
         selectedLineIds: new Set([sourceLineId]),
+        history,
+      };
+    }
+
+    case 'INTERCHANGE_GROUP': {
+      const { sourceLineIds, targetLineId } = action.payload;
+      if (sourceLineIds.includes(targetLineId)) return state;
+
+      const sourceSegs = state.segments.filter((s) => sourceLineIds.includes(s.line_id));
+      const targetSeg = state.segments.find((s) => s.line_id === targetLineId);
+
+      if (sourceSegs.length === 0 || !targetSeg) return state;
+
+      const history = recordHistory(state);
+
+      // Sort source segments by start time
+      const sortedSource = [...sourceSegs].sort((a, b) => a.start_ms - b.start_ms);
+      const groupStartMs = sortedSource[0].start_ms;
+      const targetStartMs = targetSeg.start_ms;
+      const targetDuration = targetSeg.end_ms - targetSeg.start_ms;
+
+      const shiftDelta = targetStartMs - groupStartMs;
+
+      // 1. Target segment moves to group's old start
+      // 2. Group segments move to target's start with their relative spacing preserved
+      const updatedSegments = state.segments.map((s) => {
+        if (s.line_id === targetLineId) {
+          return {
+            line_id: targetLineId,
+            start_ms: groupStartMs,
+            end_ms: groupStartMs + targetDuration,
+          };
+        }
+        if (sourceLineIds.includes(s.line_id)) {
+          return {
+            line_id: s.line_id,
+            start_ms: s.start_ms + shiftDelta,
+            end_ms: s.end_ms + shiftDelta,
+          };
+        }
+        return s;
+      });
+
+      return {
+        ...state,
+        segments: updatedSegments,
         history,
       };
     }

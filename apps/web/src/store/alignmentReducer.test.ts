@@ -222,5 +222,46 @@ describe('alignmentReducer', () => {
     expect(seg3.start_ms).toBe(1000);
     expect(seg3.end_ms).toBe(3000);
   });
+
+  it('interchanges a multi-segment verse group with a target segment preserving relative spacing', () => {
+    let state = getLoadedState();
+    // Add third segment at 10,000ms - 12,000ms
+    state = alignmentReducer(state, {
+      type: 'SET_SEGMENT',
+      payload: { line_id: '3', start_ms: 10000, end_ms: 12000, maxDurationMs: 20000 },
+    });
+
+    // Group = ['1', '2'] (Line 1: [1000, 3000], Line 2: [3500, 5500])
+    // Target = '3' (Line 3: [10000, 12000])
+    state = alignmentReducer(state, {
+      type: 'INTERCHANGE_GROUP',
+      payload: { sourceLineIds: ['1', '2'], targetLineId: '3' },
+    });
+
+    const seg1 = state.segments.find((s) => s.line_id === '1')!;
+    const seg2 = state.segments.find((s) => s.line_id === '2')!;
+    const seg3 = state.segments.find((s) => s.line_id === '3')!;
+
+    // Target Line 3 moves to old group start: [1000, 3000] (duration 2000ms)
+    expect(seg3.start_ms).toBe(1000);
+    expect(seg3.end_ms).toBe(3000);
+
+    // Group shifts by delta = 10000 - 1000 = +9000ms:
+    // Line 1: 1000 + 9000 = 10000ms to 12000ms
+    // Line 2: 3500 + 9000 = 12500ms to 14500ms (preserving 500ms spacing between Line 1 and Line 2!)
+    expect(seg1.start_ms).toBe(10000);
+    expect(seg1.end_ms).toBe(12000);
+    expect(seg2.start_ms).toBe(12500);
+    expect(seg2.end_ms).toBe(14500);
+
+    // Undo restores original state perfectly
+    state = alignmentReducer(state, { type: 'UNDO' });
+    const restored1 = state.segments.find((s) => s.line_id === '1')!;
+    const restored2 = state.segments.find((s) => s.line_id === '2')!;
+    const restored3 = state.segments.find((s) => s.line_id === '3')!;
+    expect(restored1.start_ms).toBe(1000);
+    expect(restored2.start_ms).toBe(3500);
+    expect(restored3.start_ms).toBe(10000);
+  });
 });
 

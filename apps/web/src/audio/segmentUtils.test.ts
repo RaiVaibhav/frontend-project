@@ -25,7 +25,7 @@ describe('segmentUtils', () => {
     it('enforces a minimum visible pixel width', () => {
       const seg = { line_id: '2', start_ms: 5000, end_ms: 5100 }; // 100ms = 1px
       const bounds = calculateSegmentBounds(seg, durationSeconds, totalWidth);
-      expect(bounds.widthPx).toBeGreaterThanOrEqual(72); // Generous minimum visible width for handles and text
+      expect(bounds.widthPx).toBeGreaterThanOrEqual(28); // Compact minimum visible width for handles and text
     });
   });
 
