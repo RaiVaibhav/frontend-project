@@ -1174,6 +1174,47 @@ Users observed that timeline segment blocks had left and right slider handles oc
 
 - An 8px interactive edge overlay provides a comfortable mouse grab zone while preserving the central body for segment shifting and selection.
 
+---
+
+## Decision 029: 16x High-Detail Zoom, Zoom Presets, 1-Click "Place at Playhead", and Real-Time Rhythm Stamping
+
+- **Commit SHA**: `421a1cdfce77ded85067d4612f39f22ddc558165` (`421a1cd`)
+- **Date**: 2026-10-17
+
+### Context
+
+For standard songs (e.g. 3m 42s / 222 seconds), 1x zoom compresses the entire song into ~4.5 pixels per second, making fast or short lyric phrases (1–2 seconds) only 5–9 pixels wide. Even at the previous 5x zoom cap (~22px/s), users found it difficult to segment short phrases without extreme precision. Furthermore, mapping lyrics exclusively via manual mouse drag-and-drop across the entire screen from the left sidebar to the timeline was tedious and unergonomic.
+
+### Decision
+
+1. **Expanded 16x High-Detail Zoom & Preset Pills** ([`apps/web/src/App.tsx`](apps/web/src/App.tsx), [`apps/web/src/audio/WaveformCanvas.tsx`](apps/web/src/audio/WaveformCanvas.tsx)):
+   - Increased max zoom from 5x to **16x**, providing up to **~72px per second of audio**. A 1.5s phrase spans ~108px, revealing individual vocal transients, syllables, and beats clearly.
+   - Added instant zoom preset buttons: `[1x]`, `[2x]`, `[4x]`, `[8x]`, `[16x]`, allowing users to jump directly to deep resolution with a single click.
+   - Added `Ctrl + Wheel` / `Cmd + Wheel` smooth pinch/wheel zooming on the canvas container centered over the cursor.
+   - Implemented `getAdaptiveRulerInterval` ([`apps/web/src/audio/waveformUtils.ts`](apps/web/src/audio/waveformUtils.ts)), rendering dense, adaptive tick marks (down to 1s or 2s intervals at high zoom) rather than rigid 20s gaps.
+
+2. **1-Click "Place at Playhead" on Unplaced Lyrics** ([`apps/web/src/lyrics/LyricsList.tsx`](apps/web/src/lyrics/LyricsList.tsx), [`apps/web/src/segment/SegmentInspector.tsx`](apps/web/src/segment/SegmentInspector.tsx)):
+   - Added a direct `[+ Place at Playhead]` action button to every unplaced lyric card in the sidebar and inspector.
+   - Clicking immediately places the lyric at the current playhead millisecond timestamp (`controller.getCurrentTime() * 1000`) without requiring drag-and-drop.
+
+3. **Real-Time Rhythm Stamping (<kbd>Enter</kbd> / "Stamp Line")** ([`apps/web/src/App.tsx`](apps/web/src/App.tsx)):
+   - Added a prominent `[⚡ Stamp Line (↵ Enter)]` button to the transport header.
+   - Pressing <kbd>Enter</kbd> (when not typing in a text field) while listening to audio stamps the next unplaced lyric at the playhead timestamp in real-time, capping the preceding segment if still playing.
+
+4. **"Focus in Timeline" Feature**:
+   - Added `[Focus]` action buttons to placed lyric cards in `LyricsList` and `SegmentInspector`.
+   - Clicking ensures zoom is at least 4x and smoothly scrolls the viewport to center directly on that segment.
+
+### Rationale & Trade-offs
+
+- **Multiple Fast Ingestion Paths**: Providing 1-click placement, real-time rhythm stamping, and 16x zoom gives users professional DAW ergonomics tailored to both fast rough drafting (stamping in real-time) and surgical millisecond alignment (at 16x zoom).
+- **Adaptive Ticks**: Scaling ticks with pixel density prevents ruler clutter at 1x while providing sub-second precision marks at 16x.
+
+### Assumptions
+
+- 16x zoom is sufficient for all common vocal phrases down to sub-100ms consonant onsets.
+
+
 
 
 
