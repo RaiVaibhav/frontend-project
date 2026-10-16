@@ -1,0 +1,273 @@
+openapi: 3.1.0
+info:
+  title: Lyric Alignment API
+  version: 1.0.0
+  description: Backend API for timing lyric lines against audio tracks.
+servers:
+  - url: /api/v1
+    description: Proxied API origin via Vite dev server or backend direct
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Bearer token from README (lyric-align-dev-token-7f3a91)
+
+  schemas:
+    IndexResponse:
+      type: object
+      required:
+        - version
+        - endpoints
+      properties:
+        version:
+          type: string
+          example: "v1"
+        endpoints:
+          type: array
+          items:
+            type: string
+          example:
+            - "/api/v1"
+            - "/api/v1/track"
+            - "/api/v1/track/alignment"
+
+    LyricLine:
+      type: object
+      required:
+        - id
+        - index
+        - text
+      properties:
+        id:
+          type: string
+          description: Client-owned unique identifier for the line
+          example: "1"
+        index:
+          type: integer
+          minimum: 0
+          description: 0-based ordering position of the line in the sheet
+          example: 0
+        text:
+          type: string
+          description: The lyric line text
+          example: "Paper lanterns in the yard"
+
+    AlignmentSegment:
+      type: object
+      required:
+        - line_id
+        - start_ms
+        - end_ms
+      properties:
+        line_id:
+          type: string
+          description: Reference to LyricLine.id
+          example: "1"
+        start_ms:
+          type: integer
+          minimum: 0
+          description: Start timestamp in integer milliseconds
+          example: 1200
+        end_ms:
+          type: integer
+          minimum: 0
+          description: End timestamp in integer milliseconds
+          example: 3500
+
+    AlignmentData:
+      type: object
+      required:
+        - segments
+      properties:
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlignmentSegment'
+
+    TrackPayload:
+      type: object
+      required:
+        - id
+        - title
+        - artist
+        - duration_seconds
+        - audio_url
+        - lines
+        - version
+        - alignment
+      properties:
+        id:
+          type: string
+          example: "1"
+        title:
+          type: string
+          example: "You Verse You"
+        artist:
+          type: string
+          example: "AI generated (aisong.org)"
+        duration_seconds:
+          type: number
+          format: float
+          description: Total audio duration in float seconds
+          example: 124.96
+        audio_url:
+          type: string
+          description: URL path to stream track audio
+          example: "/api/audio/you-verse-you.mp3"
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LyricLine'
+        version:
+          type: integer
+          minimum: 0
+          description: Monotonically increasing version, 0 before first save
+          example: 0
+        alignment:
+          oneOf:
+            - $ref: '#/components/schemas/AlignmentData'
+            - type: "null"
+
+    PutAlignmentRequest:
+      type: object
+      required:
+        - version
+        - lines
+        - segments
+      properties:
+        version:
+          type: integer
+          minimum: 0
+          description: The integer version last read from GET /api/v1/track
+          example: 0
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LyricLine'
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlignmentSegment'
+
+    PutAlignmentResponse:
+      type: object
+      required:
+        - version
+        - lines
+        - alignment
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: New version assigned by the server
+          example: 1
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LyricLine'
+        alignment:
+          $ref: '#/components/schemas/AlignmentData'
+
+    BadRequestError:
+      type: object
+      required:
+        - error
+        - hint
+      properties:
+        error:
+          type: string
+          example: "invalid_segment_times"
+        hint:
+          type: string
+          example: "segments[0] start_ms and end_ms must be integer milliseconds; duration_seconds is a float but segment times are not"
+
+    ConflictError:
+      type: object
+      required:
+        - error
+        - expected_version
+        - received_version
+        - version
+        - lines
+        - alignment
+      properties:
+        error:
+          type: string
+          example: "version_conflict"
+        expected_version:
+          type: integer
+          example: 2
+        received_version:
+          type: integer
+          example: 0
+        version:
+          type: integer
+          example: 2
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LyricLine'
+        alignment:
+          oneOf:
+            - $ref: '#/components/schemas/AlignmentData'
+            - type: "null"
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1:
+    get:
+      summary: Index of API endpoints
+      responses:
+        '200':
+          description: List of supported endpoints
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexResponse'
+
+  /api/v1/track:
+    get:
+      summary: Get the current track, lyric sheet, and alignment state
+      responses:
+        '200':
+          description: Full track metadata and current alignment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackPayload'
+        '404':
+          description: No track is seeded
+
+  /api/v1/track/alignment:
+    put:
+      summary: Save alignment segments and updated lyric lines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutAlignmentRequest'
+      responses:
+        '200':
+          description: Alignment successfully saved with new version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PutAlignmentResponse'
+        '400':
+          description: Malformed payload or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+        '409':
+          description: Stale version conflict; carries server's current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'

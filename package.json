@@ -12,6 +12,7 @@
     "reset": "pnpm --filter @fixture/api run reset",
     "build": "pnpm --filter @fixture/web run build",
     "typecheck": "pnpm --filter @fixture/web run typecheck",
+    "typegen:api": "pnpm --filter @fixture/web run typegen:api",
     "test": "playwright test",
     "test:unit": "pnpm --filter @fixture/web run test",
     "test:ui": "playwright test --ui",

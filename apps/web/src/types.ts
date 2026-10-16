@@ -1,73 +1,30 @@
 /**
  * Domain types for Lyric Alignment.
  *
+ * Generated & matched directly against OpenAPI 3.1 contract (apps/api/openapi.yaml).
+ *
  * Single Units Boundary:
  * - Audio playback & track duration: float seconds (`duration_seconds`)
  * - Segment boundaries: integer milliseconds (`start_ms`, `end_ms`)
  * - Presentation format: M:SS.mmm (handled strictly at UI seams via utils/time)
  */
 
-export interface LyricLine {
-  id: string;
-  index: number;
-  text: string;
-}
+import type { components, paths } from './api-schema';
 
-export interface AlignmentSegment {
-  line_id: string;
-  start_ms: number;
-  end_ms: number;
-}
-
-export interface TrackData {
-  id: string;
-  title: string;
-  artist: string;
-  duration_seconds: number;
-  audio_url: string;
-  lines: LyricLine[];
-  version: number;
-  alignment: {
-    segments: AlignmentSegment[];
-  } | null;
-}
+// Types derived directly from OpenAPI generated schema
+export type LyricLine = components['schemas']['LyricLine'];
+export type AlignmentSegment = components['schemas']['AlignmentSegment'];
+export type AlignmentData = components['schemas']['AlignmentData'];
+export type TrackData = components['schemas']['TrackPayload'];
+export type PutAlignmentPayload = components['schemas']['PutAlignmentRequest'];
+export type PutAlignmentResponse = components['schemas']['PutAlignmentResponse'];
+export type ConflictErrorBody = components['schemas']['ConflictError'];
+export type BadRequestErrorBody = components['schemas']['BadRequestError'];
+export type IndexResponse = components['schemas']['IndexResponse'];
+export type ApiPaths = paths;
 
 /**
- * Payload sent to PUT /api/v1/track/alignment
- */
-export interface PutAlignmentPayload {
-  version: number;
-  lines: LyricLine[];
-  segments: AlignmentSegment[];
-}
-
-/**
- * Successful response from PUT /api/v1/track/alignment
- */
-export interface PutAlignmentResponse {
-  version: number;
-  lines: LyricLine[];
-  alignment: {
-    segments: AlignmentSegment[];
-  };
-}
-
-/**
- * 409 Conflict payload returned by API when local version is stale
- */
-export interface ConflictErrorBody {
-  error: 'version_conflict';
-  expected_version: number;
-  received_version: number;
-  version: number;
-  lines: LyricLine[];
-  alignment: {
-    segments: AlignmentSegment[];
-  } | null;
-}
-
-/**
- * Editor interaction and selection state
+ * Editor interaction and selection state (client-side)
  */
 export interface SelectionState {
   selectedLineIds: Set<string>;
@@ -75,7 +32,7 @@ export interface SelectionState {
 }
 
 /**
- * History snapshot for Undo/Redo
+ * History snapshot for Undo/Redo (client-side)
  */
 export interface HistorySnapshot {
   lines: LyricLine[];
@@ -84,7 +41,7 @@ export interface HistorySnapshot {
 }
 
 /**
- * Real-time audio playback clock info
+ * Real-time audio playback clock info (client-side)
  */
 export interface PlaybackClock {
   currentTimeSeconds: number;
