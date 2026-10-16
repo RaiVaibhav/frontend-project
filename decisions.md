@@ -730,6 +730,42 @@ Implemented fully interchangeable drag-and-drop across the timeline and the lyri
 
 - When users drop one segment onto another, their intent is to exchange their assigned timing intervals.
 
+---
+
+## Decision 018: Enforce Minimum Segment Width and Duration Preservation on Drop
+
+- **Commit SHA**: `d0e9fe060f78d910fe2d057705fe0e7fa82b0d0c` (`d0e9fe0`)
+- **Date**: 2026-10-16
+
+### Context
+
+When users dragged a lyric line from the left sidebar and dropped it onto the timeline, the resulting segment block frequently appeared too narrow (e.g. 16px–28px, or even narrower if dropped near the end of an open gap). Because each segment block contains two 10px trim handles, narrow blocks caused the handles to overlap and eclipse the text, making it difficult to read the lyric or grab the block for dragging.
+
+### Decision
+
+1. **Guaranteed Minimum Visual Width** ([`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUtils.ts), [`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx)):
+   - Increased `minBlockWidthPx` default from `16px` to `72px` in `calculateSegmentBounds`.
+   - Added `minWidth: '72px'` directly to the segment block style in `SegmentLane.tsx`.
+   - Guaranteed at least 52px of readable text area between the left (10px) and right (10px) trim handles.
+   - Added container clamping (`clampedLeftPx = Math.max(0, Math.min(leftPx, totalWidth - widthPx))`) to prevent segments with minimum width from overflowing past the track container's right boundary.
+
+2. **Duration Preservation in Gap Fitting** ([`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUtils.ts), [`apps/web/src/App.tsx`](apps/web/src/App.tsx)):
+   - Updated `fitDroppedSegment` so that dropping near the end of an available gap shifts the segment's start timestamp leftward (`start = Math.max(gap.start, Math.min(targetMs, gap.end - duration))`), preserving the full healthy duration (preferred `4500ms`) instead of truncating into a narrow sliver.
+   - Set `minLengthMs = 500ms` so that gaps are guaranteed to accommodate a substantial segment.
+
+3. **Unit Tests** ([`apps/web/src/audio/segmentUtils.test.ts`](apps/web/src/audio/segmentUtils.test.ts)):
+   - Updated minimum pixel width test to verify $\ge 72\text{px}$.
+   - Verified that dropping at the tail of an open interval shifts start left to preserve the full 3500ms–4500ms segment duration (all 56 unit tests passing).
+
+### Rationale & Trade-offs
+
+- **Usability Over Strict Pixel-to-Ms Scaling**: A segment representing 1 second on a 2-minute track is only 8px wide mathematically. Enforcing a 72px visual floor ensures that every lyric line remains legible and interactable without distorting the underlying playback timestamps.
+- **Trade-off**: For extremely short segments in dense clusters, the visual width floor may cause visual borders to touch; trimming and dragging remain bounded by the underlying timestamps.
+
+### Assumptions
+
+- The minimum usable interactive touch/mouse target for a timeline segment block with dual handles is 72px.
+
 
 
 
