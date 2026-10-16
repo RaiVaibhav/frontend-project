@@ -83,7 +83,7 @@ export function LyricsList({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        minHeight: '420px',
+        maxHeight: '100%',
         background: 'var(--surface)',
         borderRadius: 'var(--radius)',
         border: '1px solid var(--border)',
@@ -176,6 +176,7 @@ export function LyricsList({
           display: 'flex',
           flexDirection: 'column',
           gap: '4px',
+          minHeight: 0,
         }}
       >
         {filteredLines.length === 0 ? (

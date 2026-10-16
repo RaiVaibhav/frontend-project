@@ -123,6 +123,8 @@ export default function App() {
         display: "flex",
         flexDirection: "column",
         gap: "var(--space-4)",
+        height: "calc(100vh - 48px)",
+        boxSizing: "border-box",
       }}
     >
       {/* Top Header & Transport Bar */}
@@ -260,7 +262,9 @@ export default function App() {
           display: "grid",
           gridTemplateColumns: "minmax(320px, 380px) 1fr",
           gap: "var(--space-4)",
-          alignItems: "start",
+          alignItems: "stretch",
+          flex: 1,
+          minHeight: 0,
         }}
       >
         {/* Left Column: Lyrics Sheet */}
@@ -280,6 +284,8 @@ export default function App() {
             display: "flex",
             flexDirection: "column",
             gap: "var(--space-4)",
+            minHeight: 0,
+            overflowY: "auto",
           }}
         >
           {/* Waveform Section */}
