@@ -1054,6 +1054,63 @@ When zoomed in (e.g. 2x, 3x, or 5x), dragging the playhead needle to scrub along
 
 - An edge activation boundary of 60px provides an intuitive balance between stable on-screen scrubbing and smooth continuous track navigation.
 
+---
+
+## Decision 026: Full Lyric Hover Tooltip, Light/Dark Theme Switcher, and Local Audio Upload with LRC Export
+
+- **Commit SHA**: `ccbe58d8b50a634e00ef99ceab1589f6db667ec1` (`ccbe58d`)
+- **Date**: 2026-10-16
+
+### Context
+
+Users requested three core usability and workflow capabilities:
+1. **Full Lyric Visibility for Truncated Sentences**: When lyric sentences are long, the timeline segment blocks truncate the text with an ellipsis (`...`). Users need to inspect the full, untruncated sentence and exact timing boundaries directly on the timeline without hunting through the sidebar.
+2. **Light and Dark Theme Switcher**: Users need an explicit, intuitive way to toggle between Light and Dark interface themes, persisting their preference across page refreshes.
+3. **Bring Your Own Track (BYOT) & LRC Export Workflow**: Users need to upload arbitrary local audio files (`.mp3`, `.wav`, `.ogg`, `.flac`, etc.) directly into the editor without backend uploading, align the lyrics, and export standard time-coded `.lrc` files (with both one-click file download and copy-to-clipboard functionality).
+
+### Decision
+
+1. **Full Lyric Hover Tooltip** ([`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx)):
+   - Added hover state tracking (`hoveredLineId`) with mouse enter/leave events.
+   - Rendered an elevated floating card tooltip (`bottom: calc(100% + 8px)`) showing:
+     - The complete quoted line text in bold.
+     - The exact start and end millisecond timestamps (`formatTime(segment.start_ms)} – {formatTime(segment.end_ms)}`).
+     - A centered downward indicator arrow styled with CSS borders.
+   - Set `pointerEvents: 'none'` and `z-index: 50` to ensure smooth scrubbing and zero layout shifts.
+   - Retained the native `title` attribute for browser accessibility.
+
+2. **Light & Dark Theme Switcher** ([`apps/web/src/styles.css`](apps/web/src/styles.css), [`apps/web/src/App.tsx`](apps/web/src/App.tsx)):
+   - Defined structured `:root, [data-theme='light']` and `[data-theme='dark']` CSS variable blocks for colors, borders, surfaces, text, and `color-scheme`.
+   - Initialized React `theme` state (`'light' | 'dark'`) reading from `localStorage.getItem('theme')` or system `window.matchMedia('(prefers-color-scheme: dark)')`.
+   - Toggling sets `document.documentElement.setAttribute('data-theme', nextTheme)` and persists to `localStorage`.
+   - Added accessible theme toggle button in the header with `Sun` and `Moon` Lucide icons.
+
+3. **Local Audio Upload Pipeline** ([`apps/web/src/App.tsx`](apps/web/src/App.tsx)):
+   - Added hidden `<input type="file" accept="audio/*" />` ref triggered via an "Upload Audio" button in the header.
+   - Leveraged our pure `decodeAudioFromFile(file, 800)` Web Audio decoding pipeline:
+     - Decodes raw PCM audio into an `AudioBuffer`.
+     - Downmixes multi-channel audio to mono and extracts 800 visual amplitude peaks.
+     - Creates a local blob Object URL for seamless streaming playback in `AudioController`.
+     - Updates application track metadata (`title`, `duration`, `peaks`) and resets alignment state for the new track.
+
+4. **LRC Export & Preview Modal** ([`apps/web/src/App.tsx`](apps/web/src/App.tsx), [`apps/web/src/utils/lrc.ts`](apps/web/src/utils/lrc.ts)):
+   - Added an "Export .LRC" header action opening an accessible preview modal.
+   - Serializes placed segments into standard `[mm:ss.xx]` synchronized lyric lines sorted chronologically.
+   - Provides a read-only monospaced preview of the `.lrc` file contents.
+   - Includes "Copy to Clipboard" with animated checkmark feedback.
+   - Includes "Download .LRC" which triggers a native browser download as `<song-title>.lrc`.
+
+### Rationale & Trade-offs
+
+- **Zero-Latency Audio Decoding**: Utilizing client-side Web Audio `decodeAudioData` allows users to load any local audio file instantly without uploading multi-megabyte media files to a remote server.
+- **Floating Hover Tooltip vs. Expanding Segment Height**: Floating tooltips preserve the uniform timeline height and prevent jittery layout shifts while allowing users to read arbitrarily long lyric sentences.
+- **Trade-off**: Local file Object URLs are ephemeral to the browser session, which is standard for client-side fixture tooling.
+
+### Assumptions
+
+- Exported `.lrc` files adhere to standard millisecond-hundredth timestamp formatting (`[mm:ss.xx]`) compatible with media players like VLC, Apple Music, and Spotify.
+
+
 
 
 
