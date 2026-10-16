@@ -837,6 +837,41 @@ Three usability bugs were identified in timeline segment interaction:
 
 - When dragging a multi-verse group over an unselected segment, the user's intent is to interchange the group's timing span with that target segment.
 
+---
+
+## Decision 021: Waveform Zoom Controls, Keyboard Shortcuts, and Viewport Tracking
+
+- **Commit SHA**: `aa886c8`
+- **Date**: 2026-10-16
+
+### Context
+
+The low-fidelity design wireframe specifies a `"Zoom [-] [+]"` control for the waveform and timeline area. On longer tracks, placing segments or making fine-grained millisecond adjustments to trim handles requires expanding the horizontal time scale.
+
+### Decision
+
+1. **Zoom State & UI Controls** ([`apps/web/src/App.tsx`](apps/web/src/App.tsx)):
+   - Added `zoom` state (`1.0x` to `5.0x`, step `0.5x`) mounted directly in the Waveform header matching the wireframe layout.
+   - Built a segmented control group with `ZoomOut` (<kbd>-</kbd>), clickable zoom level readout (`1.0x` click-to-reset), and `ZoomIn` (<kbd>+</kbd>).
+   - Added global hotkeys in `handleKeyDown`: <kbd>=</kbd>/<kbd>+</kbd> to zoom in, <kbd>-</kbd>/<kbd>_</kbd> to zoom out, and <kbd>0</kbd> to reset zoom to 1.0x.
+
+2. **Auto-Scrolling Viewport Playhead Follow** ([`apps/web/src/audio/WaveformCanvas.tsx`](apps/web/src/audio/WaveformCanvas.tsx)):
+   - When zoomed in (`totalWidth > containerWidth`), the container enables horizontal scrolling (`overflowX: auto`).
+   - Extended the 60fps needle subscriber callback in `WaveformCanvas` to automatically scroll the container whenever the playhead advances past the visible viewport threshold (`pixelX > scrollLeft + viewportW - 80`), ensuring the active playback position remains in view without user intervention.
+
+3. **Responsive Scaling Across Children**:
+   - `WaveformCanvas` passes the computed `totalWidth` directly to `SegmentLane`, automatically expanding segment blocks, trim handles, and ruler ticks in exact 1:1 synchronization with the audio peaks.
+
+### Rationale & Trade-offs
+
+- **Linear Zoom Scaling**: Scaling `totalWidth = Math.max(containerWidth, Math.floor(containerWidth * zoom))` preserves exact pixel-to-time ratios across both waveform and segment lanes.
+- **Auto-Follow without React Re-renders**: The scroll follow runs inside the decoupled `subscribeTime` callback, avoiding React state updates during high-frequency playback.
+
+### Assumptions
+
+- 1.0x to 5.0x zoom range provides optimal granularity from macro full-song overview down to sub-100ms precision adjustments.
+
+
 
 
 
