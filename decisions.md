@@ -871,6 +871,46 @@ The low-fidelity design wireframe specifies a `"Zoom [-] [+]"` control for the w
 
 - 1.0x to 5.0x zoom range provides optimal granularity from macro full-song overview down to sub-100ms precision adjustments.
 
+---
+
+## Decision 022: 3-Line Karaoke Teleprompter Banner (Micro-Step 3E)
+
+- **Commit SHA**: `f317ef4`
+- **Date**: 2026-10-16
+
+### Context
+
+The low-fidelity design wireframe specifies a live teleprompter readout positioned below the waveform: *"A karaoke readout along the bottom — the line playing now, with the ones either side of it for context."* This enables users to immediately verify real-time alignment against the singer's vocal delivery without visual hunting.
+
+### Decision
+
+1. **3-Line Context Helper & Unit Tests** ([`apps/web/src/lyrics/lyricsUtils.ts`](apps/web/src/lyrics/lyricsUtils.ts), [`apps/web/src/lyrics/lyricsUtils.test.ts`](apps/web/src/lyrics/lyricsUtils.test.ts)):
+   - Implemented `getKaraokeContext(lines, segments, timeMs)`: returns `prevLine`, `currentLine` (if active at `timeMs`), and `nextLine`.
+   - Handled non-singing gaps (instrumental intro, interludes, or track ending) gracefully by previewing upcoming or preceding lines while displaying a soft `♪ (Instrumental — next line coming up) ♪` status.
+   - Added unit test suite covering active playback, intro gaps, and post-track playback (all 60 unit tests passing).
+
+2. **Decoupled Playback Teleprompter Component** ([`apps/web/src/lyrics/KaraokeBanner.tsx`](apps/web/src/lyrics/KaraokeBanner.tsx)):
+   - Subscribes to `controller.subscribeTime` directly from the audio controller.
+   - Evaluates a composite context transition key (`${prev?.id}|${curr?.id}|${next?.id}`). React state updates only when the active line changes (~0.2–0.3Hz), eliminating 60fps clock churn while maintaining crisp UI reactivity.
+   - Visual Hierarchy:
+     - Top line: `prevLine.text` (muted, 55% opacity, `0.85rem`).
+     - Center line: `currentLine.text` (prominent, bold `1.2rem`, emerald text shadow, active time badge `[ 0:14 – 0:18 ]`).
+     - Bottom line: `nextLine.text` (muted, 55% opacity, `0.85rem`).
+   - Click-to-Seek: Clicking any line in the prompter instantly seeks audio playback to that line's start timestamp.
+
+3. **Mounting in Layout** ([`apps/web/src/App.tsx`](apps/web/src/App.tsx)):
+   - Mounted directly beneath the Waveform & Timeline section in the center workspace column matching the wireframe layout.
+
+### Rationale & Trade-offs
+
+- **Cognitive Clarity**: Presenting the current singing line with 1 line of preceding and succeeding context matches standard teleprompter UX, allowing instant verification of whether a line started too early or late.
+- **Performance Seam**: Using transition-key comparison inside `subscribeTime` guarantees 0 unnecessary re-renders during playback.
+
+### Assumptions
+
+- The teleprompter displays lyrics based on their sequential order in `lines`, synchronizing with timestamps defined in `segments`.
+
+
 
 
 
