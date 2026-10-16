@@ -28,6 +28,8 @@ export function WaveformCanvas({
   const needleRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const lastUserScrollTimeRef = useRef<number>(0);
+  const edgePanRafRef = useRef<number | null>(null);
+  const currentMouseXRef = useRef<number | null>(null);
 
   const [containerWidth, setContainerWidth] = useState(800);
 
@@ -142,8 +144,12 @@ export function WaveformCanvas({
 
       needle.style.transform = `translate3d(${pixelX}px, 0, 0)`;
 
-      // Smooth continuous viewport tracking during playback when zoomed in
-      if (containerRef.current && totalWidth > containerWidth) {
+      // When the user is manually dragging/scrubbing the needle, do NOT auto-scroll here!
+      // The dedicated edge auto-pan loop handles smooth edge scrolling.
+      if (isDraggingRef.current) return;
+
+      // When audio is actively playing (not paused) and zoomed in: smoothly track playhead
+      if (controller.isPlaying && containerRef.current && totalWidth > containerWidth) {
         const container = containerRef.current;
         const now = performance.now();
         // Cooldown: only auto-follow if user has not scrolled manually in the last 1800ms
@@ -222,19 +228,85 @@ export function WaveformCanvas({
     };
   }, [totalWidth, containerWidth]);
 
-  // 3. Click and Drag to Seek, with Middle-Click / Alt-Drag Pan support
+  // 3. Coordinate conversion: converts clientX to exact audio timestamp
+  const getTimeFromClientX = useCallback(
+    (clientX: number): number => {
+      const container = containerRef.current;
+      if (!container || durationSeconds <= 0 || totalWidth <= 0) return 0;
+
+      const containerRect = container.getBoundingClientRect();
+      const mouseXInViewport = clientX - containerRect.left;
+      const canvasX = Math.max(0, Math.min(totalWidth, mouseXInViewport + container.scrollLeft));
+      return pixelToTime(canvasX, totalWidth, durationSeconds);
+    },
+    [durationSeconds, totalWidth]
+  );
+
+  // 4. Edge auto-pan loop during needle dragging (smooth, controlled edge pan)
+  const stopEdgePan = useCallback(() => {
+    if (edgePanRafRef.current !== null) {
+      cancelAnimationFrame(edgePanRafRef.current);
+      edgePanRafRef.current = null;
+    }
+  }, []);
+
+  const startEdgePan = useCallback(() => {
+    if (edgePanRafRef.current !== null) return;
+
+    const loop = () => {
+      if (!isDraggingRef.current || !containerRef.current || currentMouseXRef.current === null) {
+        edgePanRafRef.current = null;
+        return;
+      }
+
+      const container = containerRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const mouseXInViewport = currentMouseXRef.current - containerRect.left;
+      const viewportW = container.clientWidth;
+      const edgeZone = 60; // 60px activation zone near viewport boundaries
+
+      let speed = 0;
+      if (mouseXInViewport > viewportW - edgeZone) {
+        // Dragging near or beyond right edge: pan right smoothly
+        const dist = mouseXInViewport - (viewportW - edgeZone);
+        speed = Math.min(10, Math.max(2, Math.round(dist / 8) + 2));
+      } else if (mouseXInViewport < edgeZone) {
+        // Dragging near or beyond left edge: pan left smoothly
+        const dist = edgeZone - mouseXInViewport;
+        speed = -Math.min(10, Math.max(2, Math.round(dist / 8) + 2));
+      }
+
+      if (speed !== 0 && totalWidth > viewportW) {
+        const oldScroll = container.scrollLeft;
+        const newScroll = Math.max(0, Math.min(totalWidth - viewportW, container.scrollLeft + speed));
+        if (newScroll !== oldScroll) {
+          container.scrollLeft = newScroll;
+          // Synchronize playhead needle position as container glides under cursor
+          const targetSeconds = getTimeFromClientX(currentMouseXRef.current);
+          controller.seek(targetSeconds);
+        }
+      }
+
+      edgePanRafRef.current = requestAnimationFrame(loop);
+    };
+
+    edgePanRafRef.current = requestAnimationFrame(loop);
+  }, [totalWidth, getTimeFromClientX, controller]);
+
+  // Clean up edge panning RAF on unmount
+  useEffect(() => {
+    return () => {
+      stopEdgePan();
+    };
+  }, [stopEdgePan]);
+
   const handleSeekFromEvent = useCallback(
     (e: React.MouseEvent<HTMLDivElement> | MouseEvent) => {
-      const canvas = canvasRef.current;
-      if (!canvas || durationSeconds <= 0) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const targetSeconds = pixelToTime(clickX, totalWidth, durationSeconds);
-
+      if (durationSeconds <= 0) return;
+      const targetSeconds = getTimeFromClientX(e.clientX);
       controller.seek(targetSeconds);
     },
-    [controller, durationSeconds, totalWidth]
+    [controller, durationSeconds, getTimeFromClientX]
   );
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -267,18 +339,25 @@ export function WaveformCanvas({
 
     // 2. Left click: primary seek and scrub
     if (e.button !== 0) return;
-    lastUserScrollTimeRef.current = 0; // Seeking immediately re-engages needle auto-centering
+    lastUserScrollTimeRef.current = 0;
     isDraggingRef.current = true;
+    currentMouseXRef.current = e.clientX;
+
+    // Immediately seek to click position
     handleSeekFromEvent(e);
+    startEdgePan();
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (isDraggingRef.current) {
+        currentMouseXRef.current = moveEvent.clientX;
         handleSeekFromEvent(moveEvent);
       }
     };
 
     const handleMouseUp = () => {
       isDraggingRef.current = false;
+      currentMouseXRef.current = null;
+      stopEdgePan();
       document.body.style.cursor = '';
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
@@ -297,12 +376,9 @@ export function WaveformCanvas({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const lineId = e.dataTransfer.getData('text/plain');
-    const canvas = canvasRef.current;
-    if (!lineId || !canvas || durationSeconds <= 0) return;
+    if (!lineId || durationSeconds <= 0) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const dropX = e.clientX - rect.left;
-    const dropSeconds = pixelToTime(dropX, totalWidth, durationSeconds);
+    const dropSeconds = getTimeFromClientX(e.clientX);
     if (onDropLine) {
       onDropLine(lineId, dropSeconds);
     }
