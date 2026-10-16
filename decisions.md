@@ -796,6 +796,48 @@ Users observed that the timeline segment interchange hover badge appeared incons
 
 - An overlap of 8 pixels or center-point containment indicates clear user intent to interchange with the target segment.
 
+---
+
+## Decision 020: Compact Segment Min Width, Pixel-Accurate Verse Outline, and Multi-Verse Interchange
+
+- **Commit SHA**: `841e728`
+- **Date**: 2026-10-16
+
+### Context
+
+Three usability bugs were identified in timeline segment interaction:
+1. **Excessive Segment Width for Short Lyrics**: Setting `minBlockWidthPx = 72` and CSS `minWidth: 72px` caused short syllables (e.g. "Oh", 300ms–500ms) to stretch to ~3.6s of visual timeline space, misleading the user on syllable duration.
+2. **Multi-Verse Outline Misalignment**: When Shift-selecting or multi-selecting segments, the dashed selection box did not fully overlap all segments. Because the outline width was calculated using raw millisecond offsets (`(maxEnd - minStart) / durationMs * totalWidth`), it failed to account for the visual width of the rightmost segment (`bounds.leftPx + bounds.widthPx`), causing the outline to cut through the last segment.
+3. **Multi-Verse Dragging Lacked Interchange**: Dragging a multi-verse group did not support interchanging with other segments; it previously dispatched continuous `nudgeSelected` actions on mousemove, flooding undo history.
+
+### Decision
+
+1. **Compact Minimum Segment Width** ([`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUtils.ts), [`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx)):
+   - Reduced `minBlockWidthPx` default and CSS `minWidth` from `72px` to `28px`.
+   - Accommodates both 10px trim handles plus an 8px text/spacer area without inflating short lyrics into large blocks.
+   - Updated unit test expectation in `segmentUtils.test.ts`.
+
+2. **Pixel-Accurate Multi-Verse Outline** ([`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx)):
+   - Replaced millisecond-based outline calculations with rendered visual geometry: computes `minLeftPx` (leftmost pixel of any selected segment) and `maxRightPx` (rightmost `leftPx + widthPx` of any selected segment).
+   - Renders bounding box at `left: minLeftPx - 4px` and `width: (maxRightPx - minLeftPx) + 8px`, guaranteeing complete 4px padding overlap around all selected segments without clipping.
+   - Added GPU-accelerated `transform: translate3d` so the dashed outline glides in sync with the segments during multi-drag.
+
+3. **Multi-Verse Drag & Interchange** ([`apps/web/src/store/alignmentReducer.ts`](apps/web/src/store/alignmentReducer.ts), [`apps/web/src/store/useAlignmentStore.ts`](apps/web/src/store/useAlignmentStore.ts), [`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx)):
+   - Added `INTERCHANGE_GROUP` action to `alignmentReducer`: swaps the prospective span of a multi-segment verse group with a target segment, shifting the target to the verse's original start timestamp while preserving all relative intervals between lines in the verse.
+   - Supported interactive multi-drag in `SegmentLane.tsx`: computes prospective group bounds and detects interchange targets among unselected segments with the floating `"Interchange Verse"` badge.
+   - If dropped in open space, commits a single clean `nudgeSelected` offset on mouseup (no history spamming).
+   - Added comprehensive unit tests in `alignmentReducer.test.ts` (all 57 unit tests passing).
+
+### Rationale & Trade-offs
+
+- **Direct Visual Alignment**: Calculating the multi-verse outline from visual segment coordinates ensures 100% geometric consistency across all zoom and aspect ratios.
+- **Atomic History**: Moving multi-verse drag commitments to `mouseup` ensures a single <kbd>⌘Z</kbd> reverses the entire move or interchange.
+
+### Assumptions
+
+- When dragging a multi-verse group over an unselected segment, the user's intent is to interchange the group's timing span with that target segment.
+
+
 
 
 
