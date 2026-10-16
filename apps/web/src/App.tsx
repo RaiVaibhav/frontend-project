@@ -10,6 +10,7 @@ import { useAlignmentStore } from "./store/useAlignmentStore";
 import { LyricsList } from "./lyrics/LyricsList";
 import { SegmentLane } from "./audio/SegmentLane";
 import { KaraokeBanner } from "./lyrics/KaraokeBanner";
+import { SegmentInspector } from "./segment/SegmentInspector";
 import { getLineIdRange, fitDroppedSegment } from "./audio/segmentUtils";
 
 export default function App() {
@@ -36,6 +37,8 @@ export default function App() {
     nudgeSelected,
     interchangeSegments,
     interchangeGroup,
+    splitSegment,
+    mergeWithNext,
     undo,
     redo,
   } = useAlignmentStore();
@@ -155,7 +158,7 @@ export default function App() {
   return (
     <div
       style={{
-        maxWidth: "1360px",
+        maxWidth: "1480px",
         margin: "0 auto",
         display: "flex",
         flexDirection: "column",
@@ -297,7 +300,7 @@ export default function App() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(320px, 380px) 1fr",
+          gridTemplateColumns: "minmax(280px, 320px) 1fr minmax(280px, 320px)",
           gap: "var(--space-4)",
           alignItems: "stretch",
           flex: 1,
@@ -542,6 +545,24 @@ export default function App() {
             onSeekToTime={(timeSec) => controller.seek(timeSec)}
           />
         </div>
+
+        {/* Right Column: Segment Inspector matching wireframe */}
+        <SegmentInspector
+          lines={alignmentState.lines}
+          segments={alignmentState.segments}
+          selectedLineIds={alignmentState.selectedLineIds}
+          maxDurationMs={Math.round(track.duration_seconds * 1000)}
+          onUpdateSegment={(lineId, startMs, endMs) =>
+            setSegment(lineId, startMs, endMs, Math.round(track.duration_seconds * 1000))
+          }
+          onDeleteSegment={deleteSegment}
+          onSplitSegment={splitSegment}
+          onMergeWithNext={mergeWithNext}
+          onNudgeSelected={(deltaMs) =>
+            nudgeSelected(deltaMs, Math.round(track.duration_seconds * 1000))
+          }
+          onSeekToTime={(timeSec) => controller.seek(timeSec)}
+        />
       </div>
     </div>
   );
