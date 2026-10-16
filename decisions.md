@@ -1110,6 +1110,36 @@ Users requested three core usability and workflow capabilities:
 
 - Exported `.lrc` files adhere to standard millisecond-hundredth timestamp formatting (`[mm:ss.xx]`) compatible with media players like VLC, Apple Music, and Spotify.
 
+---
+
+## Decision 027: Multi-Line Word Wrapping for Long Sentences in Karaoke Teleprompter
+
+- **Commit SHA**: `f987f604108ad324849719ee11d8f404cfe993fe` (`f987f60`)
+- **Date**: 2026-10-16
+
+### Context
+
+When long lyric sentences played in the Karaoke Teleprompter banner (`KaraokeBanner.tsx`), the active singing line and context lines were forcibly constrained to a single line via `whiteSpace: 'nowrap'`, `overflow: 'hidden'`, and `textOverflow: 'ellipsis'`. This truncated longer lines with ellipses (`...`) and caused text clipping, preventing users from seeing the full sentence as it was being sung.
+
+### Decision
+
+1. **Balanced Multi-Line Wrapping** ([`apps/web/src/lyrics/KaraokeBanner.tsx`](apps/web/src/lyrics/KaraokeBanner.tsx)):
+   - Replaced `whiteSpace: 'nowrap'` with `whiteSpace: 'normal'` and added `wordBreak: 'break-word'` and `overflowWrap: 'break-word'`.
+   - Removed `overflow: 'hidden'` and `textOverflow: 'ellipsis'` from the active, previous, and upcoming line elements.
+   - Set fluid responsive font sizing for the active line (`clamp(1.1rem, 1.8vw, 1.25rem)`) with `lineHeight: 1.38` and generous horizontal padding (`0 var(--space-3)`).
+   - Expanded container `minHeight: '90px'` and `gap: '6px'`, allowing the banner to expand dynamically to accommodate multi-line lyrics with zero text clipping.
+   - Enhanced `title` attributes on all three lines to display full quotes for clarity and screen reader accessibility.
+
+### Rationale & Trade-offs
+
+- **Teleprompter Readability**: Users singing or reviewing lyrics need the complete text visible at all times. Natural word wrapping preserves typography rhythm while preventing truncation.
+- **Fluid Layout**: Allowing the teleprompter card to dynamically adapt its height to longer lines avoids hardcoded clipping without degrading adjacent layout areas.
+
+### Assumptions
+
+- Long sentences wrap based on standard word boundaries, maintaining center alignment for visual balance.
+
+
 
 
 
