@@ -398,6 +398,46 @@ Implemented [`apps/web/src/audio/WaveformCanvas.tsx`](apps/web/src/audio/Wavefor
 
 - The playhead needle operates over the combined container width, with horizontal scrolling enabled when zoom factor > 1.
 
+---
+
+## Decision 011: Waveform & Audio Transport Mounting in App (Micro-Step 2E)
+
+- **Commit SHA**: `593f0ec7a96163351ec946e6a1d0d939c43e4985` (`593f0ec`)
+- **Date**: 2026-10-16
+
+### Context
+
+With the Web Audio decoding pipeline (Decision 008), the decoupled audio controller (Decision 009), and the waveform canvas (Decision 010) created and unit-tested in isolation, the main application view (`apps/web/src/App.tsx`) needed to be upgraded from the initial placeholder to wire together live track fetching, audio streaming, waveform peak rendering, transport controls (Play/Pause), and a direct 60fps clock readout.
+
+### Decision
+
+Mounted the audio and waveform subsystems into [`apps/web/src/App.tsx`](apps/web/src/App.tsx):
+1. **Track Ingestion & Audio Buffer Decoding**:
+   - Fetches the active track via `api<TrackData>('/api/v1/track')`.
+   - Passes `track.audio_url` into `useAudioPlayer.load()`.
+   - Asynchronously decodes the audio via `decodeAudioFromUrl(track.audio_url)` to populate waveform `peaks`.
+2. **Decoupled Live Clock Readout** ([`apps/web/src/audio/TimeClock.tsx`](apps/web/src/audio/TimeClock.tsx)):
+   - Implemented `TimeClock` component that registers directly with `controller.subscribeTime` to update its DOM `textContent` (`M:SS.mmm / M:SS.mmm`) on 60fps clock ticks without triggering `App` component re-renders.
+3. **Mounted Waveform Canvas**:
+   - Renders `WaveformCanvas` with track duration and peaks, providing instant visual feedback and click-to-seek scrubbing.
+4. **Transport Controls**:
+   - Added accessible Play/Pause toggle with Lucide icons (`Play`, `Pause`, `Music`).
+
+### Rationale & Trade-offs
+
+- **Immediate User Feedback**: The user can now see real audio waveform peaks, press play, see the red playhead needle sweep across the screen, and click to seek.
+- **Strict Performance Boundary Maintained**: Neither audio playback ticks nor the time clock trigger React state changes or re-renders in `App`.
+- **Trade-off**: Peak extraction requires an initial fetch and decode upon track load (~150ms for a 2-minute MP3), during which a subtle "Decoding audio peaks..." indicator is displayed.
+
+### Alternatives Rejected
+
+- **Keeping native browser `<audio controls>` widget**: Rejected because native audio widgets cannot be synchronized with custom waveform playheads or styled to match the wireframe design.
+
+### Assumptions
+
+- The backend serves audio files with byte-range and CORS support, enabling `decodeAudioData` in the browser.
+
+
 
 
 
