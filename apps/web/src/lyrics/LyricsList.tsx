@@ -18,6 +18,8 @@ export interface LyricsListProps {
   onSelectRange?: (lineId: string) => void;
   onDeleteSegment: (lineId: string) => void;
   onSeekToTime: (timeSeconds: number) => void;
+  onPlaceAtCurrentTime?: (lineId: string) => void;
+  onFocusLine?: (lineId: string) => void;
   onStampActiveLine?: (lineId: string) => void;
   onSetLines?: (lines: LyricLine[]) => void;
   onAddLine?: (text?: string) => void;
@@ -35,6 +37,8 @@ export function LyricsList({
   onSelectRange,
   onDeleteSegment,
   onSeekToTime,
+  onPlaceAtCurrentTime,
+  onFocusLine,
   onSetLines,
   onAddLine,
   onReorderLines,
@@ -429,6 +433,28 @@ export function LyricsList({
                         </span>
                       </button>
 
+                      {onFocusLine && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onFocusLine(line.id);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            borderRadius: '3px',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                          title="Focus and zoom to segment in timeline"
+                        >
+                          <Crosshair size={12} />
+                        </button>
+                      )}
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -450,21 +476,50 @@ export function LyricsList({
                       </button>
                     </div>
                   ) : (
-                    <span
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.75rem',
-                        color: 'var(--text-muted)',
-                        background: 'rgba(128,128,128,0.06)',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                      }}
-                    >
-                      <CircleDashed size={11} />
-                      <span>Unplaced</span>
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {onPlaceAtCurrentTime ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPlaceAtCurrentTime(line.id);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: 'rgba(99, 185, 140, 0.15)',
+                            border: '1px solid var(--accent)',
+                            color: 'var(--accent)',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.74rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title="Click to place segment directly at current audio playhead"
+                        >
+                          <Plus size={11} />
+                          <span>Place at Playhead</span>
+                        </button>
+                      ) : (
+                        <span
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.75rem',
+                            color: 'var(--text-muted)',
+                            background: 'rgba(128,128,128,0.06)',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                          }}
+                        >
+                          <CircleDashed size={11} />
+                          <span>Unplaced</span>
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

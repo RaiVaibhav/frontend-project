@@ -5,6 +5,8 @@ import {
   Trash2,
   Combine,
   Play,
+  Crosshair,
+  Plus,
 } from 'lucide-react';
 import type { LyricLine, AlignmentSegment } from '../types';
 import { formatTime, parseTimeToMs } from '../utils/time';
@@ -26,6 +28,8 @@ export interface SegmentInspectorProps {
   onMergeLines?: (firstLineId: string, secondLineId: string) => void;
   onNudgeSelected: (deltaMs: number) => void;
   onSeekToTime?: (timeSeconds: number) => void;
+  onFocusSegment?: (lineId: string) => void;
+  onPlaceSegment?: (lineId: string) => void;
 }
 
 export function SegmentInspector({
@@ -40,6 +44,8 @@ export function SegmentInspector({
   onMergeLines,
   onNudgeSelected,
   onSeekToTime,
+  onFocusSegment,
+  onPlaceSegment,
 }: SegmentInspectorProps) {
   // Selected line and segment lookups
   const selectedLines = lines.filter((l) => selectedLineIds.has(l.id));
@@ -229,18 +235,41 @@ export function SegmentInspector({
                 Line {lineIndex + 1}
               </span>
               {singleSeg ? (
-                <span
-                  style={{
-                    fontSize: '0.7rem',
-                    color: 'var(--accent)',
-                    background: 'rgba(99, 185, 140, 0.15)',
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                    fontWeight: 600,
-                  }}
-                >
-                  Timed
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      color: 'var(--accent)',
+                      background: 'rgba(99, 185, 140, 0.15)',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Timed
+                  </span>
+                  {onFocusSegment && (
+                    <button
+                      onClick={() => onFocusSegment(singleLine.id)}
+                      title="Focus and zoom to segment in timeline"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        color: 'var(--text)',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        fontSize: '0.68rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Crosshair size={10} />
+                      <span>Focus</span>
+                    </button>
+                  )}
+                </div>
               ) : (
                 <span
                   style={{
@@ -750,12 +779,42 @@ export function SegmentInspector({
                 fontSize: '0.78rem',
                 color: 'var(--text-muted)',
                 lineHeight: 1.4,
-                padding: 'var(--space-2)',
+                padding: 'var(--space-3)',
                 background: 'rgba(0,0,0,0.1)',
                 borderRadius: '4px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--space-2)',
               }}
             >
-              This line is not placed on the timeline yet. Drag it from the left lyrics sheet onto the waveform to time it!
+              <div>This line is not placed on the timeline yet.</div>
+              {onPlaceSegment ? (
+                <button
+                  onClick={() => onPlaceSegment(singleLine.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '8px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    background: 'var(--accent)',
+                    color: 'var(--accent-contrast)',
+                    border: 'none',
+                    borderRadius: 'var(--radius)',
+                    cursor: 'pointer',
+                  }}
+                  title="Place this lyric line at current audio needle position"
+                >
+                  <Plus size={14} />
+                  <span>Place at Playhead</span>
+                </button>
+              ) : (
+                <div style={{ fontSize: '0.72rem', opacity: 0.8 }}>
+                  Drag it from the left lyrics sheet onto the waveform to time it!
+                </div>
+              )}
             </div>
           )}
         </div>

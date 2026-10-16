@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Play,
   Pause,
@@ -7,6 +7,7 @@ import {
   Redo2,
   ZoomIn,
   ZoomOut,
+  Zap,
   Sun,
   Moon,
   Upload,
@@ -208,7 +209,91 @@ export default function App() {
     };
   }, [load, init]);
 
-  // Global Keyboard Shortcuts (Space for play/pause, Ctrl+Z/Y for undo/redo)
+  // 1-Click / Rhythm Stamp next unplaced line at current playback playhead
+  const handleStampNextLine = useCallback(() => {
+    if (!track) return;
+    const currentMs = Math.round(controller.getCurrentTime() * 1000);
+    const durationMs = Math.round(track.duration_seconds * 1000);
+
+    // Target priority: currently selected line if unplaced, otherwise first unplaced line
+    const unplaced = alignmentState.lines.filter(
+      (l) => !alignmentState.segments.some((s) => s.line_id === l.id)
+    );
+    if (unplaced.length === 0) return;
+
+    let targetLine = unplaced[0];
+    for (const id of alignmentState.selectedLineIds) {
+      const match = unplaced.find((l) => l.id === id);
+      if (match) {
+        targetLine = match;
+        break;
+      }
+    }
+
+    // Trim preceding segment if it extends past currentMs
+    const sorted = [...alignmentState.segments].sort((a, b) => a.start_ms - b.start_ms);
+    const prevSeg = sorted.filter((s) => s.start_ms <= currentMs).pop();
+    if (prevSeg && prevSeg.end_ms > currentMs) {
+      const minEnd = prevSeg.start_ms + 200;
+      setSegment(prevSeg.line_id, prevSeg.start_ms, Math.max(minEnd, currentMs), durationMs);
+    }
+
+    // Prevent collision with subsequent segment
+    const nextSeg = sorted.find((s) => s.start_ms > currentMs);
+    const endMs = nextSeg
+      ? Math.max(currentMs + 200, Math.min(currentMs + 3200, nextSeg.start_ms))
+      : Math.min(currentMs + 3200, durationMs);
+
+    setSegment(targetLine.id, currentMs, endMs, durationMs);
+    handleSelectLine(targetLine.id, false);
+  }, [track, controller, alignmentState, setSegment]);
+
+  // Place specific unplaced line at target timestamp (or playhead)
+  const handlePlaceAtTime = useCallback(
+    (lineId: string, targetTimeMs?: number) => {
+      if (!track) return;
+      const durationMs = Math.round(track.duration_seconds * 1000);
+      const placeMs = targetTimeMs != null ? targetTimeMs : Math.round(controller.getCurrentTime() * 1000);
+      const otherSegments = alignmentState.segments.filter((s) => s.line_id !== lineId);
+      const fitted = fitDroppedSegment(otherSegments, placeMs, durationMs, 3500, 200);
+      if (fitted) {
+        setSegment(lineId, fitted.start_ms, fitted.end_ms, durationMs);
+        handleSelectLine(lineId, false);
+      }
+    },
+    [track, controller, alignmentState.segments, setSegment]
+  );
+
+  // Focus on a line in the timeline: zooms in and centers viewport
+  const handleFocusLine = useCallback(
+    (lineId: string) => {
+      const seg = alignmentState.segments.find((s) => s.line_id === lineId);
+      if (!seg || !track) return;
+      handleSelectLine(lineId, false);
+
+      const targetZoom = Math.max(zoom, 4);
+      if (zoom < 4) {
+        setZoom(4);
+      }
+
+      setTimeout(() => {
+        const container = document.querySelector(".waveform-scroll-container") as HTMLDivElement | null;
+        if (container) {
+          const durationMs = track.duration_seconds * 1000;
+          const totalW = Math.max(container.clientWidth, container.clientWidth * targetZoom);
+          const centerMs = seg.start_ms + (seg.end_ms - seg.start_ms) / 2;
+          const centerPx = (centerMs / durationMs) * totalW;
+          container.scrollTo({
+            left: Math.max(0, centerPx - container.clientWidth / 2),
+            behavior: "smooth",
+          });
+        }
+      }, 50);
+    },
+    [alignmentState.segments, track, zoom]
+  );
+
+  // Global Keyboard Shortcuts (Space for play/pause, Enter to stamp line, Ctrl+Z/Y for undo/redo, Zoom +/-)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -224,6 +309,12 @@ export default function App() {
       if (e.code === "Space") {
         e.preventDefault();
         togglePlay();
+      }
+
+      // Enter to stamp next line at playhead
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleStampNextLine();
       }
 
       // Undo / Redo
@@ -242,10 +333,10 @@ export default function App() {
         if (canRedo) redo();
       }
 
-      // Zoom + / - / 0 shortcuts
+      // Zoom + / - / 0 shortcuts (supports up to 16x zoom)
       if (e.key === "=" || e.key === "+") {
         e.preventDefault();
-        setZoom((prev) => Math.min(5, Math.round((prev + 0.5) * 10) / 10));
+        setZoom((prev) => Math.min(16, Math.round((prev + 0.5) * 10) / 10));
       } else if (e.key === "-" || e.key === "_") {
         e.preventDefault();
         setZoom((prev) => Math.max(1, Math.round((prev - 0.5) * 10) / 10));
@@ -257,7 +348,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [togglePlay, canUndo, canRedo, undo, redo]);
+  }, [togglePlay, canUndo, canRedo, undo, redo, handleStampNextLine]);
 
   if (error)
     return (
@@ -363,6 +454,29 @@ export default function App() {
             controller={controller}
             durationSeconds={track.duration_seconds}
           />
+
+          {/* Stamp Next Line Button (Enter) */}
+          <button
+            onClick={handleStampNextLine}
+            title="Stamp the next unplaced lyric line at current audio playhead (Enter)"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--accent)",
+              background: "rgba(99, 185, 140, 0.15)",
+              color: "var(--accent)",
+              cursor: "pointer",
+            }}
+          >
+            <Zap size={14} />
+            <span>Stamp Line</span>
+            <kbd style={{ fontSize: "0.68rem", opacity: 0.8, background: "rgba(0,0,0,0.1)", padding: "1px 4px", borderRadius: "3px" }}>↵ Enter</kbd>
+          </button>
 
           <div
             style={{
@@ -507,6 +621,8 @@ export default function App() {
           onSelectRange={handleSelectRange}
           onDeleteSegment={deleteSegment}
           onSeekToTime={(timeSec) => controller.seek(timeSec)}
+          onPlaceAtCurrentTime={handlePlaceAtTime}
+          onFocusLine={handleFocusLine}
           onSetLines={setLines}
           onAddLine={addLine}
           onReorderLines={reorderLines}
@@ -564,12 +680,12 @@ export default function App() {
                   </span>
                 )}
 
-                {/* Zoom Controls matching wireframe: Zoom [-] [1.0x] [+] */}
+                {/* Zoom Controls with up to 16x and Presets: [1x] [2x] [4x] [8x] [16x] */}
                 <div
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "2px",
+                    gap: "4px",
                     background: "rgba(0,0,0,0.2)",
                     padding: "2px 6px",
                     borderRadius: "var(--radius)",
@@ -581,7 +697,7 @@ export default function App() {
                       fontSize: "0.75rem",
                       color: "var(--text-muted)",
                       fontWeight: 500,
-                      marginRight: "4px",
+                      marginRight: "2px",
                     }}
                   >
                     Zoom
@@ -594,8 +710,8 @@ export default function App() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      width: "24px",
-                      height: "24px",
+                      width: "22px",
+                      height: "22px",
                       padding: 0,
                       background: "transparent",
                       border: "none",
@@ -627,25 +743,49 @@ export default function App() {
                   </button>
 
                   <button
-                    onClick={() => setZoom((prev) => Math.min(5, Math.round((prev + 0.5) * 10) / 10))}
-                    disabled={zoom >= 5}
+                    onClick={() => setZoom((prev) => Math.min(16, Math.round((prev + 0.5) * 10) / 10))}
+                    disabled={zoom >= 16}
                     title="Zoom in (+)"
                     style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      width: "24px",
-                      height: "24px",
+                      width: "22px",
+                      height: "22px",
                       padding: 0,
                       background: "transparent",
                       border: "none",
-                      color: zoom >= 5 ? "var(--text-muted)" : "var(--text)",
-                      cursor: zoom >= 5 ? "not-allowed" : "pointer",
+                      color: zoom >= 16 ? "var(--text-muted)" : "var(--text)",
+                      cursor: zoom >= 16 ? "not-allowed" : "pointer",
                       borderRadius: "3px",
                     }}
                   >
                     <ZoomIn size={13} />
                   </button>
+
+                  {/* Quick Zoom Presets */}
+                  <div style={{ display: "flex", gap: "2px", marginLeft: "2px", borderLeft: "1px solid var(--border)", paddingLeft: "4px" }}>
+                    {[1, 2, 4, 8, 16].map((lvl) => (
+                      <button
+                        key={lvl}
+                        onClick={() => setZoom(lvl)}
+                        title={`Jump to ${lvl}x zoom`}
+                        style={{
+                          fontSize: "0.68rem",
+                          fontFamily: "var(--font-mono)",
+                          padding: "1px 5px",
+                          borderRadius: "3px",
+                          border: "1px solid var(--border)",
+                          background: Math.round(zoom) === lvl ? "var(--accent)" : "transparent",
+                          color: Math.round(zoom) === lvl ? "var(--accent-contrast)" : "var(--text-muted)",
+                          cursor: "pointer",
+                          fontWeight: Math.round(zoom) === lvl ? 600 : 400,
+                        }}
+                      >
+                        {lvl}x
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -656,6 +796,7 @@ export default function App() {
                 durationSeconds={track.duration_seconds}
                 controller={controller}
                 zoom={zoom}
+                onZoomChange={setZoom}
                 height={220}
                 segmentLaneHeight={68}
                 onDropLine={(lineId, dropSeconds) => {
@@ -753,6 +894,8 @@ export default function App() {
             nudgeSelected(deltaMs, Math.round(track.duration_seconds * 1000))
           }
           onSeekToTime={(timeSec) => controller.seek(timeSec)}
+          onFocusSegment={handleFocusLine}
+          onPlaceSegment={handlePlaceAtTime}
         />
       </div>
 

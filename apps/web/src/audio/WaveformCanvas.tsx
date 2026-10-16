@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { AudioController } from './player';
-import { calculateRulerTicks, pixelToTime } from './waveformUtils';
+import { calculateRulerTicks, pixelToTime, getAdaptiveRulerInterval } from './waveformUtils';
 
 export interface WaveformCanvasProps {
   peaks: Float32Array;
@@ -9,6 +9,7 @@ export interface WaveformCanvasProps {
   zoom?: number;
   height?: number;
   segmentLaneHeight?: number;
+  onZoomChange?: (newZoom: number) => void;
   onDropLine?: (lineId: string, dropSeconds: number) => void;
   children?: React.ReactNode | ((totalWidth: number) => React.ReactNode);
 }
@@ -20,6 +21,7 @@ export function WaveformCanvas({
   zoom = 1,
   height = 190,
   segmentLaneHeight = 50,
+  onZoomChange,
   onDropLine,
   children,
 }: WaveformCanvasProps) {
@@ -28,6 +30,8 @@ export function WaveformCanvas({
   const needleRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const lastUserScrollTimeRef = useRef<number>(0);
+  const zoomRef = useRef<number>(zoom);
+  zoomRef.current = zoom;
   const edgePanRafRef = useRef<number | null>(null);
   const currentMouseXRef = useRef<number | null>(null);
 
@@ -84,8 +88,9 @@ export function WaveformCanvas({
     ctx.lineTo(totalWidth, rulerHeight);
     ctx.stroke();
 
-    // Draw ruler tick marks & text
-    const ticks = calculateRulerTicks(durationSeconds, 20);
+    // Draw ruler tick marks & text (adaptively spaced every ~80-140px depending on zoom)
+    const tickInterval = getAdaptiveRulerInterval(durationSeconds, totalWidth);
+    const ticks = calculateRulerTicks(durationSeconds, tickInterval);
     ctx.fillStyle = 'rgba(128, 128, 128, 0.7)';
     ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
 
@@ -191,6 +196,18 @@ export function WaveformCanvas({
     };
 
     const handleWheel = (e: WheelEvent) => {
+      // 1. Pinch / Ctrl-Wheel / Cmd-Wheel: Zoom in and out smoothly
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (onZoomChange) {
+          const delta = e.deltaY < 0 ? 0.5 : -0.5;
+          const currentZoom = zoomRef.current;
+          const nextZoom = Math.max(1, Math.min(16, Math.round((currentZoom + delta) * 10) / 10));
+          onZoomChange(nextZoom);
+        }
+        return;
+      }
+
       if (container.scrollWidth <= container.clientWidth) return;
 
       lastUserScrollTimeRef.current = performance.now();
