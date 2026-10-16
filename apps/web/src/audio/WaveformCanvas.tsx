@@ -154,10 +154,12 @@ export function WaveformCanvas({
 
     const handleMouseUp = () => {
       isDraggingRef.current = false;
+      document.body.style.cursor = '';
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
 
+    document.body.style.cursor = 'ew-resize';
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
@@ -172,7 +174,7 @@ export function WaveformCanvas({
         overflowX: 'auto',
         overflowY: 'hidden',
         background: 'var(--surface)',
-        borderRadius: 'var(--radius)',
+        borderRadius: 0,
         border: '1px solid var(--border)',
         userSelect: 'none',
       }}
@@ -191,7 +193,8 @@ export function WaveformCanvas({
             width: '2px',
             height: '100%',
             backgroundColor: '#ef4444', // Prominent red playhead needle
-            pointerEvents: 'none',
+            cursor: 'ew-resize',
+            pointerEvents: 'auto',
             zIndex: 10,
             transform: 'translate3d(0, 0, 0)',
             willChange: 'transform',
@@ -202,11 +205,13 @@ export function WaveformCanvas({
             style={{
               position: 'absolute',
               top: 0,
-              left: '-5px',
-              width: '12px',
-              height: '12px',
+              left: '-6px',
+              width: '14px',
+              height: '14px',
               backgroundColor: '#ef4444',
               borderRadius: '2px',
+              cursor: 'ew-resize',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
             }}
           />
         </div>
