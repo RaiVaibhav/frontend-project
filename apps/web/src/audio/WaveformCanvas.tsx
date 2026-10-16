@@ -140,8 +140,18 @@ export function WaveformCanvas({
       const pixelX = progress * totalWidth;
 
       needle.style.transform = `translate3d(${pixelX}px, 0, 0)`;
+
+      // Auto-scroll container to keep playhead in view when zoomed in
+      if (containerRef.current && totalWidth > containerWidth) {
+        const container = containerRef.current;
+        const scrollLeft = container.scrollLeft;
+        const viewportW = container.clientWidth;
+        if (pixelX < scrollLeft || pixelX > scrollLeft + viewportW - 80) {
+          container.scrollLeft = Math.max(0, pixelX - viewportW / 3);
+        }
+      }
     });
-  }, [controller, durationSeconds, totalWidth]);
+  }, [controller, durationSeconds, totalWidth, containerWidth]);
 
   // 3. Click and Drag to Seek
   const handleSeekFromEvent = useCallback(

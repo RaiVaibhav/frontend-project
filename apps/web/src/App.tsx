@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Play, Pause, Music, Undo2, Redo2 } from "lucide-react";
+import { Play, Pause, Music, Undo2, Redo2, ZoomIn, ZoomOut } from "lucide-react";
 import { api, ApiError } from "./api";
 import type { TrackData } from "./types";
 import { useAudioPlayer } from "./audio/useAudioPlayer";
@@ -16,6 +16,7 @@ export default function App() {
   const [peaks, setPeaks] = useState<Float32Array | null>(null);
   const [isDecodingAudio, setIsDecodingAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
 
   const { isPlaying, togglePlay, load, controller } = useAudioPlayer();
 
@@ -122,6 +123,18 @@ export default function App() {
       } else if (cmdOrCtrl && (e.key === "y" || e.key === "Y")) {
         e.preventDefault();
         if (canRedo) redo();
+      }
+
+      // Zoom + / - / 0 shortcuts
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        setZoom((prev) => Math.min(5, Math.round((prev + 0.5) * 10) / 10));
+      } else if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        setZoom((prev) => Math.max(1, Math.round((prev - 0.5) * 10) / 10));
+      } else if (e.key === "0") {
+        e.preventDefault();
+        setZoom(1);
       }
     };
 
@@ -332,6 +345,8 @@ export default function App() {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                flexWrap: "wrap",
+                gap: "var(--space-2)",
               }}
             >
               <h2
@@ -345,13 +360,100 @@ export default function App() {
               >
                 Waveform & Timeline
               </h2>
-              {isDecodingAudio && (
-                <span
-                  style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}
+
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                {isDecodingAudio && (
+                  <span
+                    style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}
+                  >
+                    Decoding audio peaks…
+                  </span>
+                )}
+
+                {/* Zoom Controls matching wireframe: Zoom [-] [1.0x] [+] */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "2px",
+                    background: "rgba(0,0,0,0.2)",
+                    padding: "2px 6px",
+                    borderRadius: "var(--radius)",
+                    border: "1px solid var(--border)",
+                  }}
                 >
-                  Decoding audio peaks…
-                </span>
-              )}
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "var(--text-muted)",
+                      fontWeight: 500,
+                      marginRight: "4px",
+                    }}
+                  >
+                    Zoom
+                  </span>
+                  <button
+                    onClick={() => setZoom((prev) => Math.max(1, Math.round((prev - 0.5) * 10) / 10))}
+                    disabled={zoom <= 1}
+                    title="Zoom out (-)"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "24px",
+                      height: "24px",
+                      padding: 0,
+                      background: "transparent",
+                      border: "none",
+                      color: zoom <= 1 ? "var(--text-muted)" : "var(--text)",
+                      cursor: zoom <= 1 ? "not-allowed" : "pointer",
+                      borderRadius: "3px",
+                    }}
+                  >
+                    <ZoomOut size={13} />
+                  </button>
+
+                  <button
+                    onClick={() => setZoom(1)}
+                    title="Click to reset zoom (1.0x)"
+                    style={{
+                      fontSize: "0.75rem",
+                      fontFamily: "ui-monospace, monospace",
+                      fontWeight: 600,
+                      color: zoom > 1 ? "var(--accent)" : "var(--text)",
+                      padding: "2px 4px",
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      minWidth: "32px",
+                      textAlign: "center",
+                    }}
+                  >
+                    {zoom.toFixed(1)}x
+                  </button>
+
+                  <button
+                    onClick={() => setZoom((prev) => Math.min(5, Math.round((prev + 0.5) * 10) / 10))}
+                    disabled={zoom >= 5}
+                    title="Zoom in (+)"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "24px",
+                      height: "24px",
+                      padding: 0,
+                      background: "transparent",
+                      border: "none",
+                      color: zoom >= 5 ? "var(--text-muted)" : "var(--text)",
+                      cursor: zoom >= 5 ? "not-allowed" : "pointer",
+                      borderRadius: "3px",
+                    }}
+                  >
+                    <ZoomIn size={13} />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {peaks ? (
@@ -359,6 +461,7 @@ export default function App() {
                 peaks={peaks}
                 durationSeconds={track.duration_seconds}
                 controller={controller}
+                zoom={zoom}
                 height={220}
                 segmentLaneHeight={68}
                 onDropLine={(lineId, dropSeconds) => {
