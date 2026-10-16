@@ -246,6 +246,42 @@ Implemented contract-first type synchronization:
 
 - The backend routes in `apps/api/src/server.js` strictly conform to the schemas specified in `apps/api/openapi.yaml`.
 
+---
+
+## Decision 007: Audio Peak Extraction & Downsampling Seam (Micro-Step 2A)
+
+- **Commit SHA**: `adb70af4b706c624647900b740523297a7605e7e` (`adb70af`)
+- **Date**: 2026-10-16
+
+### Context
+
+An uncompressed 2-minute audio file decoded in the browser contains over 5 million floating-point PCM audio samples (`AudioBuffer.getChannelData`). Attempting to draw raw audio data directly onto an HTML5 canvas would freeze the UI and degrade performance. A fast, pure mathematical downsampling function is needed to extract peak amplitudes into a fixed number of visual waveform bars (e.g. 400-1200 bars).
+
+### Decision
+
+Implemented pure audio downsampling utilities:
+1. **Peak Extractor** ([`apps/web/src/audio/peaks.ts`](apps/web/src/audio/peaks.ts)):
+   - `extractPeaks(channelData: Float32Array, targetBarCount: number): Float32Array`: Partitions the millions of raw PCM samples into `targetBarCount` discrete buckets, finds the peak absolute amplitude per bucket, and clamps to `[0.0, 1.0]`.
+   - `mergeStereoToMono(leftChannel: Float32Array, rightChannel?: Float32Array): Float32Array`: Combines stereo channels by averaging sample amplitudes.
+2. **Unit Tests with Vitest** ([`apps/web/src/audio/peaks.test.ts`](apps/web/src/audio/peaks.test.ts)):
+   - Verified bucket downsampling, peak absolute detection, clamping, edge cases (empty buffers, small sample sets), and stereo-to-mono downmixing.
+
+### Rationale & Trade-offs
+
+- **Decoupled Math**: Isolate numerical audio calculations from DOM canvas rendering and Web Audio lifecycle methods, enabling instant unit testing and predictable caching.
+- **Microsecond Rendering**: Reducing 5,000,000 samples to 800 float values allows the canvas to render the entire song waveform in under 1 millisecond.
+- **Trade-off**: High-frequency transients that occur within a single bucket are represented by their peak amplitude rather than RMS (root-mean-square) energy, which is standard for lyric alignment waveforms where peak visual prominence is preferred.
+
+### Alternatives Rejected
+
+- **Computing peaks on every frame**: Rejected because recalculating 5 million samples at 60fps causes severe UI stutter.
+- **Third-party waveform extraction libraries**: Rejected to avoid unnecessary dependency weight when peak extraction is cleanly expressed in ~30 lines of pure TypeScript.
+
+### Assumptions
+
+- The primary audio visualization displays normalized amplitude bars from 0.0 to 1.0.
+
+
 
 
 
