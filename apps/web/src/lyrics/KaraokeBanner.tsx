@@ -122,50 +122,54 @@ export function KaraokeBanner({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          minHeight: '84px',
-          gap: '4px',
+          minHeight: '90px',
+          gap: '6px',
           textAlign: 'center',
+          width: '100%',
         }}
       >
         {/* 1. Previous Line (Muted, top) */}
         <div
           onClick={() => context.prevLine && handleLineClick(context.prevLine.id)}
-          title={context.prevLine ? 'Click to jump to previous line' : undefined}
+          title={context.prevLine ? `Previous: "${context.prevLine.text}" (Click to jump)` : undefined}
           style={{
             fontSize: '0.85rem',
+            lineHeight: 1.35,
             color: 'var(--text-muted)',
-            opacity: context.prevLine ? 0.55 : 0,
+            opacity: context.prevLine ? 0.6 : 0,
             cursor: context.prevLine && segmentMap.has(context.prevLine.id) ? 'pointer' : 'default',
             minHeight: '1.2rem',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            maxWidth: '90%',
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+            maxWidth: '100%',
+            padding: '0 var(--space-2)',
             transition: 'opacity 0.2s ease, transform 0.2s ease',
           }}
         >
           {context.prevLine?.text || '—'}
         </div>
 
-        {/* 2. Active Center Line (Prominent, bold, large) */}
+        {/* 2. Active Center Line (Prominent, bold, large, wraps cleanly if long) */}
         <div
           onClick={() => context.currentLine && handleLineClick(context.currentLine.id)}
-          title={context.currentLine ? 'Click to replay active line' : undefined}
+          title={context.currentLine ? `Active: "${context.currentLine.text}" (Click to replay)` : undefined}
           style={{
-            fontSize: '1.2rem',
+            fontSize: 'clamp(1.1rem, 1.8vw, 1.25rem)',
             fontWeight: 700,
+            lineHeight: 1.38,
             color: context.currentLine ? 'var(--text)' : 'var(--text-muted)',
             fontStyle: context.currentLine ? 'normal' : 'italic',
             minHeight: '1.8rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            maxWidth: '95%',
+            display: 'block',
+            textAlign: 'center',
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+            maxWidth: '100%',
+            padding: '2px var(--space-3)',
             cursor: context.currentLine ? 'pointer' : 'default',
-            textShadow: context.currentLine ? '0 0 16px rgba(99, 185, 140, 0.3)' : 'none',
+            textShadow: context.currentLine ? '0 0 16px rgba(99, 185, 140, 0.25)' : 'none',
             letterSpacing: context.currentLine ? '0.01em' : 'normal',
             transition: 'color 0.2s ease, transform 0.2s ease',
           }}
@@ -173,7 +177,7 @@ export function KaraokeBanner({
           {context.currentLine ? (
             context.currentLine.text
           ) : context.nextLine ? (
-            <span style={{ color: 'var(--accent)', opacity: 0.85, fontSize: '1rem' }}>
+            <span style={{ color: 'var(--accent)', opacity: 0.85, fontSize: '0.98rem' }}>
               ♪ (Instrumental — next line coming up) ♪
             </span>
           ) : (
@@ -184,17 +188,19 @@ export function KaraokeBanner({
         {/* 3. Upcoming Line (Muted, bottom) */}
         <div
           onClick={() => context.nextLine && handleLineClick(context.nextLine.id)}
-          title={context.nextLine ? 'Click to jump to upcoming line' : undefined}
+          title={context.nextLine ? `Upcoming: "${context.nextLine.text}" (Click to jump)` : undefined}
           style={{
             fontSize: '0.85rem',
+            lineHeight: 1.35,
             color: 'var(--text-muted)',
-            opacity: context.nextLine ? 0.55 : 0,
+            opacity: context.nextLine ? 0.6 : 0,
             cursor: context.nextLine && segmentMap.has(context.nextLine.id) ? 'pointer' : 'default',
             minHeight: '1.2rem',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            maxWidth: '90%',
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+            maxWidth: '100%',
+            padding: '0 var(--space-2)',
             transition: 'opacity 0.2s ease, transform 0.2s ease',
           }}
         >

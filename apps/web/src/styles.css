@@ -14,14 +14,14 @@
  */
 
 :root,
-[data-theme='light'] {
+[data-theme="light"] {
   /* Light Theme */
   --bg: #fbfbfa;
   --surface: #ffffff;
   --border: #e3e2df;
   --text: #1c1b19;
   --text-muted: #6b6862;
-  --accent: #2f6f4f;
+  --accent: #0f334d;
   --accent-contrast: #ffffff;
   --danger: #a33a2c;
 
@@ -33,16 +33,18 @@
   --space-6: 24px;
   --space-8: 32px;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
-    'Liberation Mono', monospace;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
 
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
+  :root:not([data-theme="light"]) {
     --bg: #17181a;
     --surface: #1f2124;
     --border: #33363b;
@@ -55,7 +57,7 @@
   }
 }
 
-[data-theme='dark'] {
+[data-theme="dark"] {
   --bg: #17181a;
   --surface: #1f2124;
   --border: #33363b;
