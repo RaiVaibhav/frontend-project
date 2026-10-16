@@ -535,6 +535,51 @@ Implemented [`apps/web/src/lyrics/lyricsUtils.ts`](apps/web/src/lyrics/lyricsUti
 
 - Audio playback durations are non-negative and track line IDs remain stable throughout a session.
 
+---
+
+## Decision 014: Interactive Segment Lane & Timeline Drag Handles (Micro-Step 3C)
+
+- **Commit SHA**: `12c78641eb1b4bb1eb4852e9ef4599723ec0872d` (`12c7864`)
+- **Date**: 2026-10-16
+
+### Context
+
+The application wireframe depicts placed lyric segments rendered directly below the waveform peaks along the audio timeline. Users need visual feedback on placed segments, with the ability to: (1) drag the left edge to trim `start_ms`, (2) drag the right edge to trim `end_ms`, (3) drag the block body to shift the segment along the timeline, and (4) double-click to preview playback from that line's start time. Empty space on the track must still allow click-to-seek without interference.
+
+### Decision
+
+Implemented [`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUtils.ts) and [`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx), integrated into [`apps/web/src/audio/WaveformCanvas.tsx`](apps/web/src/audio/WaveformCanvas.tsx):
+1. **Pure Geometry & Drag Helpers** (`segmentUtils.ts`):
+   - `calculateSegmentBounds`: Maps millisecond start/end times to timeline pixel coordinates with a guaranteed minimum visible width (16px) for unhampered clicking and trimming.
+   - `dragTrimLeft`: Clamps start edge trim to `[0, end_ms - minLengthMs]`.
+   - `dragTrimRight`: Clamps right edge trim to `[start_ms + minLengthMs, maxDurationMs]`.
+   - `dragShiftSegment`: Moves `start_ms` and `end_ms` together while strictly preserving duration and clamping within `[0, durationMs]`.
+2. **Interactive `SegmentLane` Component**:
+   - Left trim handle (`ew-resize` cursor): Live edge trimming.
+   - Right trim handle (`ew-resize` cursor): Live edge trimming.
+   - Segment body (`grab` / `grabbing` cursor): Drags to shift segment along the timeline; click selects line; double-click seeks to start and triggers audio preview.
+   - Set `pointerEvents: 'none'` on the lane container with `pointerEvents: 'auto'` on individual segment blocks, allowing clicks on empty timeline spaces to bubble directly to `WaveformCanvas` for playhead seeking.
+3. **Waveform Canvas Integration**:
+   - Updated `WaveformCanvas` to accept `segmentLaneHeight = 50px` and render a dedicated track baseline and background lane.
+   - Enhanced children rendering to support `children?: React.ReactNode | ((totalWidth: number) => React.ReactNode)`, seamlessly supplying the dynamic, zoom-aware `totalWidth` to overlay lanes.
+4. **Unit Tests with Vitest** ([`apps/web/src/audio/segmentUtils.test.ts`](apps/web/src/audio/segmentUtils.test.ts)):
+   - 8 unit tests verifying pixel coordinate conversion, minimum width guarantees, left trim clamping, right trim clamping, and segment shifting (totaling 45 passing unit tests).
+
+### Rationale & Trade-offs
+
+- **DOM Overlays vs. Canvas Path Rendering**: Rendering segment blocks as styled DOM elements over the static canvas provides native text rendering, crisp rounded corners, accessible tooltips, and responsive cursor switching (`ew-resize` vs `grab`) without re-painting the canvas on drag.
+- **Function Children Pattern**: Exposing `totalWidth` directly to children guarantees that segment coordinates always match the canvas geometry.
+- **Trade-off**: Requires synchronizing drag listeners on `window` to prevent cursor loss during fast scrubbing.
+
+### Alternatives Rejected
+
+- **Drawing segment blocks directly inside Canvas 2D context**: Rejected because implementing hit testing, text clipping, multi-state cursors, and selection highlights in 2D canvas is more bug-prone than native HTML/CSS elements.
+
+### Assumptions
+
+- The minimum segment duration remains 200ms to avoid zero-width segment states.
+
+
 
 
 
