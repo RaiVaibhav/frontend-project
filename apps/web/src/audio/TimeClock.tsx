@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
-import type { AudioController } from './player';
-import { formatTime } from '../utils/time';
+import { useEffect, useRef } from "react";
+import type { AudioController } from "./player";
+import { formatTimeShort } from "../utils/time";
 
 export interface TimeClockProps {
   controller: AudioController;
@@ -17,8 +17,8 @@ export function TimeClock({ controller, durationSeconds }: TimeClockProps) {
   useEffect(() => {
     return controller.subscribeTime((timeSec) => {
       if (clockRef.current) {
-        const currentFormatted = formatTime(timeSec * 1000);
-        const totalFormatted = formatTime(durationSeconds * 1000);
+        const currentFormatted = formatTimeShort(timeSec * 1000);
+        const totalFormatted = formatTimeShort(durationSeconds * 1000);
         clockRef.current.textContent = `${currentFormatted} / ${totalFormatted}`;
       }
     });
@@ -28,14 +28,14 @@ export function TimeClock({ controller, durationSeconds }: TimeClockProps) {
     <span
       ref={clockRef}
       style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: '14px',
+        fontFamily: "var(--font-mono)",
+        fontSize: "14px",
         fontWeight: 500,
-        color: 'var(--text-muted)',
-        letterSpacing: '0.02em',
+        color: "var(--text-muted)",
+        letterSpacing: "0.02em",
       }}
     >
-      0:00.000 / {formatTime(durationSeconds * 1000)}
+      0:00 / {formatTimeShort(durationSeconds * 1000)}
     </span>
   );
 }
