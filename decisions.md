@@ -316,6 +316,45 @@ Implemented [`apps/web/src/audio/decode.ts`](apps/web/src/audio/decode.ts):
 
 - The default waveform resolution of 800 peak bars provides ideal visual fidelity across common desktop display widths.
 
+---
+
+## Decision 009: Audio Controller & Decoupled 60fps Playback Hook (Micro-Step 2C)
+
+- **Commit SHA**: `4961ce410dd4df8d41cf83dbdf7b4946059d0473` (`4961ce4`)
+- **Date**: 2026-10-16
+
+### Context
+
+Audio playback clocks tick at high frequency (60Hz / `requestAnimationFrame`). Storing the current playback timestamp directly in top-level React state causes 60 full-component re-renders per second, degrading scrubbing performance and causing jank in interactive canvas elements. A mechanism is needed to decouple high-frequency playback ticks from React re-renders while still providing reactive controls for transport actions (play, pause, seek, load).
+
+### Decision
+
+Implemented an isolated audio transport architecture:
+1. **AudioController Class** ([`apps/web/src/audio/player.ts`](apps/web/src/audio/player.ts)):
+   - Encapsulates native `HTMLAudioElement` transport operations (`play`, `pause`, `togglePlay`, `seek`, `load`).
+   - Runs an independent `requestAnimationFrame` loop during playback that broadcasts to `timeListeners` via `subscribeTime((timeSeconds) => void)`.
+   - Emits low-frequency state transitions (`isPlaying`, `duration`) only when playback status changes.
+2. **`useAudioPlayer` Hook** ([`apps/web/src/audio/useAudioPlayer.ts`](apps/web/src/audio/useAudioPlayer.ts)):
+   - Connects `AudioController` to React component lifecycles.
+   - Exposes reactive `isPlaying` and `duration` states, stable action callbacks, and direct time subscription.
+3. **Unit Tests with Vitest** ([`apps/web/src/audio/player.test.ts`](apps/web/src/audio/player.test.ts)):
+   - Verified event listener setups, play/pause state transitions, time subscription notifications, and cleanup upon unmount/destroy.
+
+### Rationale & Trade-offs
+
+- **Zero 60fps React State Churn**: Canvas playheads and clock tickers subscribe directly to the controller's time emitter, completely bypassing React reconciliation cycles during playback.
+- **Unified Transport API**: Standardizes playback control across local files and remote backend tracks.
+- **Trade-off**: Requires components rendering high-frequency playheads to use `subscribeTime` or ref-based animation rather than consuming a reactive `currentTime` state prop.
+
+### Alternatives Rejected
+
+- **`audio.ontimeupdate` in React state**: Rejected because HTMLAudioElement's native `timeupdate` fires at an irregular 4Hz-15Hz (too jerky for smooth 60fps playheads) and still causes unwanted React component re-renders.
+
+### Assumptions
+
+- Canvas waveforms and scrubbers will register direct listeners to `subscribeTime` to update visual indicators smoothly.
+
+
 
 
 
