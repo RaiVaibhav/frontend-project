@@ -26,11 +26,13 @@ export default function App() {
     init,
     setLines,
     addLine,
+    reorderLines,
     selectLine,
     selectMultiple,
     setSegment,
     deleteSegment,
     nudgeSelected,
+    interchangeSegments,
     undo,
     redo,
   } = useAlignmentStore();
@@ -299,6 +301,7 @@ export default function App() {
           onSeekToTime={(timeSec) => controller.seek(timeSec)}
           onSetLines={setLines}
           onAddLine={addLine}
+          onReorderLines={reorderLines}
         />
 
         {/* Right Column: Waveform Timeline & Workspace */}
@@ -360,10 +363,19 @@ export default function App() {
                 onDropLine={(lineId, dropSeconds) => {
                   const dropMs = Math.round(dropSeconds * 1000);
                   const durationMs = Math.round(track.duration_seconds * 1000);
-                  const fitted = fitDroppedSegment(alignmentState.segments, dropMs, durationMs, 3500);
-                  if (fitted) {
-                    setSegment(lineId, fitted.start_ms, fitted.end_ms, durationMs);
-                    handleSelectLine(lineId, false);
+                  // Check if drop lands on an existing segment -> interchange them!
+                  const targetSeg = alignmentState.segments.find(
+                    (s) => s.line_id !== lineId && dropMs >= s.start_ms && dropMs <= s.end_ms
+                  );
+                  if (targetSeg) {
+                    interchangeSegments(lineId, targetSeg.line_id);
+                  } else {
+                    const otherSegments = alignmentState.segments.filter((s) => s.line_id !== lineId);
+                    const fitted = fitDroppedSegment(otherSegments, dropMs, durationMs, 3500);
+                    if (fitted) {
+                      setSegment(lineId, fitted.start_ms, fitted.end_ms, durationMs);
+                      handleSelectLine(lineId, false);
+                    }
                   }
                 }}
               >
@@ -384,6 +396,7 @@ export default function App() {
                         Math.round(track.duration_seconds * 1000)
                       )
                     }
+                    onInterchangeSegments={interchangeSegments}
                     onNudgeSelected={(deltaMs) =>
                       nudgeSelected(
                         deltaMs,

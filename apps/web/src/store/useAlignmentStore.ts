@@ -37,6 +37,10 @@ export function useAlignmentStore() {
     dispatch({ type: 'NUDGE_SELECTED', payload: { deltaMs, maxDurationMs } });
   }, []);
 
+  const interchangeSegments = useCallback((sourceLineId: string, targetLineId: string) => {
+    dispatch({ type: 'INTERCHANGE_SEGMENTS', payload: { sourceLineId, targetLineId } });
+  }, []);
+
   const splitSegment = useCallback(
     (line_id: string, splitTextFirst: string, splitTextSecond: string, splitTimeMs: number) => {
       dispatch({
@@ -94,6 +98,7 @@ export function useAlignmentStore() {
       setSegment,
       deleteSegment,
       nudgeSelected,
+      interchangeSegments,
       splitSegment,
       mergeWithNext,
       selectLine,
@@ -115,6 +120,7 @@ export function useAlignmentStore() {
       setSegment,
       deleteSegment,
       nudgeSelected,
+      interchangeSegments,
       splitSegment,
       mergeWithNext,
       selectLine,

@@ -25,6 +25,7 @@ export type AlignmentAction =
   | { type: 'SET_SEGMENT'; payload: { line_id: string; start_ms: number; end_ms: number; maxDurationMs: number } }
   | { type: 'DELETE_SEGMENT'; payload: { line_id: string } }
   | { type: 'NUDGE_SELECTED'; payload: { deltaMs: number; maxDurationMs: number } }
+  | { type: 'INTERCHANGE_SEGMENTS'; payload: { sourceLineId: string; targetLineId: string } }
   | { type: 'SPLIT_SEGMENT'; payload: { line_id: string; splitTextFirst: string; splitTextSecond: string; splitTimeMs: number } }
   | { type: 'MERGE_WITH_NEXT'; payload: { line_id: string } }
   | { type: 'SELECT_LINE'; payload: { line_id: string; isMulti: boolean } }
@@ -167,6 +168,50 @@ export function alignmentReducer(state: AlignmentState, action: AlignmentAction)
       return {
         ...state,
         segments: nudged,
+        history,
+      };
+    }
+
+    case 'INTERCHANGE_SEGMENTS': {
+      const { sourceLineId, targetLineId } = action.payload;
+      if (sourceLineId === targetLineId) return state;
+
+      const sourceSeg = state.segments.find((s) => s.line_id === sourceLineId);
+      const targetSeg = state.segments.find((s) => s.line_id === targetLineId);
+
+      if (!sourceSeg && !targetSeg) return state;
+
+      const history = recordHistory(state);
+
+      let updatedSegments = [...state.segments];
+
+      if (sourceSeg && targetSeg) {
+        // Both lines have segments: swap their timing intervals!
+        updatedSegments = updatedSegments.map((s) => {
+          if (s.line_id === sourceLineId) {
+            return { line_id: sourceLineId, start_ms: targetSeg.start_ms, end_ms: targetSeg.end_ms };
+          }
+          if (s.line_id === targetLineId) {
+            return { line_id: targetLineId, start_ms: sourceSeg.start_ms, end_ms: sourceSeg.end_ms };
+          }
+          return s;
+        });
+      } else if (sourceSeg && !targetSeg) {
+        // Source has a segment, target does not: transfer timing to target
+        updatedSegments = updatedSegments.map((s) =>
+          s.line_id === sourceLineId ? { line_id: targetLineId, start_ms: sourceSeg.start_ms, end_ms: sourceSeg.end_ms } : s
+        );
+      } else if (!sourceSeg && targetSeg) {
+        // Target has a segment, source does not: transfer timing to source
+        updatedSegments = updatedSegments.map((s) =>
+          s.line_id === targetLineId ? { line_id: sourceLineId, start_ms: targetSeg.start_ms, end_ms: targetSeg.end_ms } : s
+        );
+      }
+
+      return {
+        ...state,
+        segments: updatedSegments,
+        selectedLineIds: new Set([sourceLineId]),
         history,
       };
     }

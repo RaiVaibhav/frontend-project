@@ -6,6 +6,7 @@ import {
   dragShiftSegment,
   getLineIdRange,
   fitDroppedSegment,
+  findInterchangeTarget,
 } from './segmentUtils';
 import type { LyricLine } from '../types';
 
@@ -116,5 +117,34 @@ describe('segmentUtils', () => {
       expect(placed!.start_ms).toBeGreaterThanOrEqual(5000);
     });
   });
+
+  describe('findInterchangeTarget for drag-to-interchange', () => {
+    const segments = [
+      { line_id: 'l1', start_ms: 1000, end_ms: 4000 },
+      { line_id: 'l2', start_ms: 6000, end_ms: 9000 },
+      { line_id: 'l3', start_ms: 12000, end_ms: 15000 },
+    ];
+
+    it('detects target when dragged segment center is inside another segment', () => {
+      // Dragging a 3-second segment to [6500, 9500] (center 8000 is inside l2 [6000, 9000])
+      const target = findInterchangeTarget(segments, 6500, 9500);
+      expect(target).toBeDefined();
+      expect(target!.line_id).toBe('l2');
+    });
+
+    it('detects target when there is significant overlap (>= 30%)', () => {
+      // Dragging to [5500, 7500] (overlaps l2 [6000, 9000] from 6000 to 7500 = 1500ms, which is 50% of l2)
+      const target = findInterchangeTarget(segments, 5500, 7500);
+      expect(target).toBeDefined();
+      expect(target!.line_id).toBe('l2');
+    });
+
+    it('returns null when dragged into open empty space between segments', () => {
+      // Dragging to [9500, 11500] (in the gap between l2 [6000, 9000] and l3 [12000, 15000])
+      const target = findInterchangeTarget(segments, 9500, 11500);
+      expect(target).toBeNull();
+    });
+  });
 });
+
 

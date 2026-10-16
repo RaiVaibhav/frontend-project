@@ -21,6 +21,7 @@ export interface LyricsListProps {
   onStampActiveLine?: (lineId: string) => void;
   onSetLines?: (lines: LyricLine[]) => void;
   onAddLine?: (text?: string) => void;
+  onReorderLines?: (sourceIndex: number, targetIndex: number) => void;
 }
 
 type FilterMode = 'all' | 'placed' | 'unplaced';
@@ -36,11 +37,13 @@ export function LyricsList({
   onSeekToTime,
   onSetLines,
   onAddLine,
+  onReorderLines,
 }: LyricsListProps) {
   const [filter, setFilter] = useState<FilterMode>('all');
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [pastedText, setPastedText] = useState('');
+  const [dragOverLineId, setDragOverLineId] = useState<string | null>(null);
   const lineRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Segment lookup map and statistics
@@ -307,6 +310,30 @@ export function LyricsList({
                   e.dataTransfer.setData('text/plain', line.id);
                   e.dataTransfer.effectAllowed = 'copyMove';
                 }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverLineId !== line.id) {
+                    setDragOverLineId(line.id);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverLineId === line.id) {
+                    setDragOverLineId(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverLineId(null);
+                  const sourceLineId = e.dataTransfer.getData('text/plain');
+                  if (sourceLineId && sourceLineId !== line.id && onReorderLines) {
+                    const sourceIdx = lines.findIndex((l) => l.id === sourceLineId);
+                    const targetIdx = lines.findIndex((l) => l.id === line.id);
+                    if (sourceIdx >= 0 && targetIdx >= 0) {
+                      onReorderLines(sourceIdx, targetIdx);
+                    }
+                  }
+                }}
                 ref={(el) => {
                   if (el) lineRefs.current.set(line.id, el);
                   else lineRefs.current.delete(line.id);
@@ -324,12 +351,16 @@ export function LyricsList({
                   justifyContent: 'space-between',
                   padding: '8px 10px',
                   borderRadius: 'var(--radius)',
-                  background: isActivePlaying
+                  background: dragOverLineId === line.id
+                    ? 'rgba(99, 185, 140, 0.2)'
+                    : isActivePlaying
                     ? 'rgba(34, 197, 94, 0.12)'
                     : isSelected
                     ? 'rgba(255, 255, 255, 0.08)'
                     : 'transparent',
-                  border: isSelected
+                  border: dragOverLineId === line.id
+                    ? '2px dashed var(--accent)'
+                    : isSelected
                     ? '1px solid var(--accent)'
                     : isActivePlaying
                     ? '1px solid rgba(34, 197, 94, 0.4)'

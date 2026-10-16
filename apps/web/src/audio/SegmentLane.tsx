@@ -1,4 +1,5 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+import { ArrowLeftRight } from 'lucide-react';
 import type { AlignmentSegment, LyricLine } from '../types';
 import { formatTimeShort } from '../utils/time';
 import {
@@ -6,6 +7,8 @@ import {
   dragTrimLeft,
   dragTrimRight,
   dragShiftSegment,
+  findInterchangeTarget,
+  fitDroppedSegment,
 } from './segmentUtils';
 
 export interface SegmentLaneProps {
@@ -17,6 +20,7 @@ export interface SegmentLaneProps {
   onSelectLine: (lineId: string, isMulti: boolean) => void;
   onSelectRange?: (lineId: string) => void;
   onUpdateSegment: (lineId: string, startMs: number, endMs: number) => void;
+  onInterchangeSegments?: (sourceLineId: string, targetLineId: string) => void;
   onNudgeSelected?: (deltaMs: number) => void;
   onSeekToTime?: (timeSeconds: number) => void;
   height?: number;
@@ -31,10 +35,18 @@ export function SegmentLane({
   onSelectLine,
   onSelectRange,
   onUpdateSegment,
+  onInterchangeSegments,
   onNudgeSelected,
   onSeekToTime,
   height = 68,
 }: SegmentLaneProps) {
+  const [activeDrag, setActiveDrag] = useState<{
+    lineId: string;
+    shiftPx: number;
+    targetInterchangeId: string | null;
+  } | null>(null);
+  const [html5DragTargetId, setHtml5DragTargetId] = useState<string | null>(null);
+
   // Line text map for fast lookup
   const lineMap = useMemo(() => {
     const map = new Map<string, LyricLine>();
@@ -210,11 +222,15 @@ export function SegmentLane({
           document.body.style.cursor = 'grabbing';
           const initialStart = segment.start_ms;
           const initialEnd = segment.end_ms;
+          const segmentLength = initialEnd - initialStart;
           let lastShiftMs = 0;
+          let currentTargetId: string | null = null;
+          let lastDeltaX = 0;
 
           startDrag(
             e,
             (deltaX) => {
+              lastDeltaX = deltaX;
               // If multiple segments are selected, offset the whole group together!
               if (selectedLineIds.size > 1 && selectedLineIds.has(segment.line_id) && onNudgeSelected) {
                 const msPerPixel = (durationSeconds * 1000) / totalWidth;
@@ -224,20 +240,31 @@ export function SegmentLane({
                   lastShiftMs = currentShiftMs;
                   onNudgeSelected(stepDelta);
                 }
-              } else {
-                const shifted = dragShiftSegment(
-                  initialStart,
-                  initialEnd,
-                  deltaX,
-                  totalWidth,
-                  durationSeconds,
-                  prevEndMs,
-                  nextStartMs
-                );
-                onUpdateSegment(segment.line_id, shifted.start_ms, shifted.end_ms);
+                return;
               }
+
+              // Single segment dragging: allow free movement across timeline for interchange
+              const shifted = dragShiftSegment(
+                initialStart,
+                initialEnd,
+                deltaX,
+                totalWidth,
+                durationSeconds
+              );
+
+              // Check if currently hovering over another segment for interchange
+              const otherSegs = segments.filter((s) => s.line_id !== segment.line_id);
+              const target = findInterchangeTarget(otherSegs, shifted.start_ms, shifted.end_ms);
+              currentTargetId = target ? target.line_id : null;
+
+              setActiveDrag({
+                lineId: segment.line_id,
+                shiftPx: deltaX,
+                targetInterchangeId: currentTargetId,
+              });
             },
             () => {
+              setActiveDrag(null);
               // Click selection if mouse did not drag
               if (!isDraggingRef.current) {
                 if (e.shiftKey && onSelectRange) {
@@ -245,10 +272,42 @@ export function SegmentLane({
                 } else {
                   onSelectLine(segment.line_id, e.metaKey || e.ctrlKey);
                 }
+                return;
+              }
+
+              // Drag completed:
+              if (selectedLineIds.size <= 1 || !selectedLineIds.has(segment.line_id)) {
+                if (currentTargetId && onInterchangeSegments) {
+                  // Interchanged with another segment!
+                  onInterchangeSegments(segment.line_id, currentTargetId);
+                } else if (lastDeltaX !== 0) {
+                  // Dropped in open space: place cleanly into gap without overlap
+                  const shifted = dragShiftSegment(
+                    initialStart,
+                    initialEnd,
+                    lastDeltaX,
+                    totalWidth,
+                    durationSeconds
+                  );
+                  const otherSegs = segments.filter((s) => s.line_id !== segment.line_id);
+                  const fitted = fitDroppedSegment(
+                    otherSegs,
+                    shifted.start_ms,
+                    Math.round(durationSeconds * 1000),
+                    segmentLength
+                  );
+                  if (fitted) {
+                    onUpdateSegment(segment.line_id, fitted.start_ms, fitted.end_ms);
+                  }
+                }
               }
             }
           );
         };
+
+        const isBeingDragged = activeDrag?.lineId === segment.line_id;
+        const isInterchangeTarget =
+          activeDrag?.targetInterchangeId === segment.line_id || html5DragTargetId === segment.line_id;
 
         return (
           <div
@@ -259,6 +318,28 @@ export function SegmentLane({
                 onSeekToTime(segment.start_ms / 1000);
               }
             }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = 'copy';
+              if (html5DragTargetId !== segment.line_id) {
+                setHtml5DragTargetId(segment.line_id);
+              }
+            }}
+            onDragLeave={() => {
+              if (html5DragTargetId === segment.line_id) {
+                setHtml5DragTargetId(null);
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setHtml5DragTargetId(null);
+              const sourceLineId = e.dataTransfer.getData('text/plain');
+              if (sourceLineId && sourceLineId !== segment.line_id && onInterchangeSegments) {
+                onInterchangeSegments(sourceLineId, segment.line_id);
+              }
+            }}
             title={`${lineText} (${formatTimeShort(segment.start_ms)} - ${formatTimeShort(segment.end_ms)})`}
             style={{
               position: 'absolute',
@@ -266,19 +347,62 @@ export function SegmentLane({
               left: `${bounds.leftPx}px`,
               width: `${bounds.widthPx}px`,
               height: `${height - 10}px`,
-              background: isSelected ? 'rgba(99, 185, 140, 0.45)' : 'rgba(99, 185, 140, 0.25)',
-              border: isSelected ? '2px solid var(--accent)' : '1px solid rgba(99, 185, 140, 0.6)',
+              background: isInterchangeTarget
+                ? 'rgba(99, 185, 140, 0.55)'
+                : isSelected
+                ? 'rgba(99, 185, 140, 0.45)'
+                : 'rgba(99, 185, 140, 0.25)',
+              border: isInterchangeTarget
+                ? '2px dashed var(--accent)'
+                : isSelected
+                ? '2px solid var(--accent)'
+                : '1px solid rgba(99, 185, 140, 0.6)',
               borderRadius: 'var(--radius)',
               pointerEvents: 'auto',
               display: 'flex',
               alignItems: 'center',
               boxSizing: 'border-box',
-              cursor: 'grab',
-              boxShadow: isSelected ? '0 0 10px rgba(99, 185, 140, 0.4)' : 'none',
-              transition: 'border-color 0.15s ease, background 0.15s ease',
-              overflow: 'hidden',
+              cursor: isBeingDragged ? 'grabbing' : 'grab',
+              boxShadow: isInterchangeTarget
+                ? '0 0 16px rgba(99, 185, 140, 0.7)'
+                : isBeingDragged
+                ? '0 8px 24px rgba(0, 0, 0, 0.5), 0 0 12px var(--accent)'
+                : isSelected
+                ? '0 0 10px rgba(99, 185, 140, 0.4)'
+                : 'none',
+              transform: isBeingDragged ? `translate3d(${activeDrag.shiftPx}px, 0, 0)` : 'none',
+              zIndex: isBeingDragged ? 20 : isInterchangeTarget ? 15 : 2,
+              transition: isBeingDragged ? 'none' : 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
+              overflow: 'visible',
             }}
           >
+            {/* Interchange Floating Target Badge */}
+            {isInterchangeTarget && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-26px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-contrast)',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  zIndex: 30,
+                  pointerEvents: 'none',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                }}
+              >
+                <ArrowLeftRight size={11} />
+                <span>Interchange</span>
+              </div>
+            )}
             {/* Left Trim Handle */}
             <div
               onMouseDown={handleLeftTrimStart}

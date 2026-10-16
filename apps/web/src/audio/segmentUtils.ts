@@ -192,3 +192,45 @@ export function fitDroppedSegment(
   return { start_ms: start, end_ms: start + duration };
 }
 
+/**
+ * Given the currently dragged segment's prospective [currentStartMs, currentEndMs]
+ * and all other segments, finds if there is an overlapping target segment to interchange with.
+ * Detects if the dragged segment's center falls within another segment,
+ * or if there is significant overlap (>= 30% of target duration).
+ */
+export function findInterchangeTarget(
+  otherSegments: AlignmentSegment[],
+  currentStartMs: number,
+  currentEndMs: number
+): AlignmentSegment | null {
+  const midpoint = (currentStartMs + currentEndMs) / 2;
+
+  // 1. Direct midpoint hit: center of dragged segment is inside target segment
+  for (const seg of otherSegments) {
+    if (midpoint >= seg.start_ms && midpoint <= seg.end_ms) {
+      return seg;
+    }
+  }
+
+  // 2. Significant overlap: overlap >= 30% of target segment's duration
+  let bestTarget: AlignmentSegment | null = null;
+  let maxOverlap = 0;
+
+  for (const seg of otherSegments) {
+    const overlapStart = Math.max(currentStartMs, seg.start_ms);
+    const overlapEnd = Math.min(currentEndMs, seg.end_ms);
+    const overlapMs = Math.max(0, overlapEnd - overlapStart);
+    const targetLength = seg.end_ms - seg.start_ms;
+
+    if (overlapMs > 0 && overlapMs >= targetLength * 0.3) {
+      if (overlapMs > maxOverlap) {
+        maxOverlap = overlapMs;
+        bestTarget = seg;
+      }
+    }
+  }
+
+  return bestTarget;
+}
+
+

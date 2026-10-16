@@ -175,4 +175,52 @@ describe('alignmentReducer', () => {
     expect(state.selectedLineIds.has(state.lines[3].id)).toBe(true);
     expect(state.history.past.length).toBe(1);
   });
+
+  it('interchanges two placed segments and supports undo', () => {
+    let state = getLoadedState();
+    // Segment 1 is [1000, 3000], Segment 2 is [3500, 5500]
+    expect(state.segments[0].line_id).toBe('1');
+    expect(state.segments[1].line_id).toBe('2');
+
+    state = alignmentReducer(state, {
+      type: 'INTERCHANGE_SEGMENTS',
+      payload: { sourceLineId: '1', targetLineId: '2' },
+    });
+
+    const seg1 = state.segments.find((s) => s.line_id === '1')!;
+    const seg2 = state.segments.find((s) => s.line_id === '2')!;
+
+    // Swapped! Line 1 now has [3500, 5500], Line 2 has [1000, 3000]
+    expect(seg1.start_ms).toBe(3500);
+    expect(seg1.end_ms).toBe(5500);
+    expect(seg2.start_ms).toBe(1000);
+    expect(seg2.end_ms).toBe(3000);
+
+    // Undo restores original positions
+    state = alignmentReducer(state, { type: 'UNDO' });
+    const restoredSeg1 = state.segments.find((s) => s.line_id === '1')!;
+    const restoredSeg2 = state.segments.find((s) => s.line_id === '2')!;
+    expect(restoredSeg1.start_ms).toBe(1000);
+    expect(restoredSeg1.end_ms).toBe(3000);
+    expect(restoredSeg2.start_ms).toBe(3500);
+    expect(restoredSeg2.end_ms).toBe(5500);
+  });
+
+  it('interchanges a placed segment with an unplaced line', () => {
+    let state = getLoadedState();
+    // Line 3 is currently unplaced
+    expect(state.segments.some((s) => s.line_id === '3')).toBe(false);
+
+    state = alignmentReducer(state, {
+      type: 'INTERCHANGE_SEGMENTS',
+      payload: { sourceLineId: '3', targetLineId: '1' },
+    });
+
+    // Line 3 takes Line 1's segment [1000, 3000], Line 1 becomes unplaced
+    expect(state.segments.some((s) => s.line_id === '1')).toBe(false);
+    const seg3 = state.segments.find((s) => s.line_id === '3')!;
+    expect(seg3.start_ms).toBe(1000);
+    expect(seg3.end_ms).toBe(3000);
+  });
 });
+
