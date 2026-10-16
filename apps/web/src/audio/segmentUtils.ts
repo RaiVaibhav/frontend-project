@@ -201,35 +201,65 @@ export function fitDroppedSegment(
 /**
  * Given the currently dragged segment's prospective [currentStartMs, currentEndMs]
  * and all other segments, finds if there is an overlapping target segment to interchange with.
- * Detects if the dragged segment's center falls within another segment,
- * or if there is significant overlap (>= 30% of target duration).
+ * Detects visual pixel overlap when layout geometry is supplied, or time-based overlap,
+ * ensuring consistent detection the moment segments touch or overlap.
  */
 export function findInterchangeTarget(
   otherSegments: AlignmentSegment[],
   currentStartMs: number,
-  currentEndMs: number
+  currentEndMs: number,
+  durationSeconds?: number,
+  totalWidth?: number,
+  minOverlapPx = 8
 ): AlignmentSegment | null {
-  const midpoint = (currentStartMs + currentEndMs) / 2;
+  if (otherSegments.length === 0) return null;
 
-  // 1. Direct midpoint hit: center of dragged segment is inside target segment
-  for (const seg of otherSegments) {
-    if (midpoint >= seg.start_ms && midpoint <= seg.end_ms) {
-      return seg;
+  // 1. Pixel-based detection if layout geometry is supplied
+  if (durationSeconds && totalWidth && durationSeconds > 0 && totalWidth > 0) {
+    const durationMs = durationSeconds * 1000;
+    const draggedLeftPx = (currentStartMs / durationMs) * totalWidth;
+    const naturalWidthPx = ((currentEndMs - currentStartMs) / durationMs) * totalWidth;
+    const draggedWidthPx = Math.max(72, naturalWidthPx);
+    const draggedRightPx = draggedLeftPx + draggedWidthPx;
+    const draggedCenterPx = draggedLeftPx + draggedWidthPx / 2;
+
+    let bestTarget: AlignmentSegment | null = null;
+    let maxOverlap = 0;
+
+    for (const seg of otherSegments) {
+      const segBounds = calculateSegmentBounds(seg, durationSeconds, totalWidth);
+      const segLeft = segBounds.leftPx;
+      const segRight = segBounds.leftPx + segBounds.widthPx;
+
+      const centerInside = draggedCenterPx >= segLeft && draggedCenterPx <= segRight;
+      const overlapStart = Math.max(draggedLeftPx, segLeft);
+      const overlapEnd = Math.min(draggedRightPx, segRight);
+      const overlapPx = Math.max(0, overlapEnd - overlapStart);
+
+      if (centerInside || overlapPx >= minOverlapPx) {
+        if (overlapPx > maxOverlap || (centerInside && maxOverlap === 0)) {
+          maxOverlap = overlapPx;
+          bestTarget = seg;
+        }
+      }
     }
+
+    return bestTarget;
   }
 
-  // 2. Significant overlap: overlap >= 30% of target segment's duration
+  // 2. Pure time-based detection fallback (used in headless tests)
+  const midpoint = (currentStartMs + currentEndMs) / 2;
   let bestTarget: AlignmentSegment | null = null;
   let maxOverlap = 0;
 
   for (const seg of otherSegments) {
+    const centerInside = midpoint >= seg.start_ms && midpoint <= seg.end_ms;
     const overlapStart = Math.max(currentStartMs, seg.start_ms);
     const overlapEnd = Math.min(currentEndMs, seg.end_ms);
     const overlapMs = Math.max(0, overlapEnd - overlapStart);
-    const targetLength = seg.end_ms - seg.start_ms;
 
-    if (overlapMs > 0 && overlapMs >= targetLength * 0.3) {
-      if (overlapMs > maxOverlap) {
+    if (centerInside || overlapMs > 0) {
+      if (overlapMs > maxOverlap || (centerInside && maxOverlap === 0)) {
         maxOverlap = overlapMs;
         bestTarget = seg;
       }

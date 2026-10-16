@@ -254,7 +254,13 @@ export function SegmentLane({
 
               // Check if currently hovering over another segment for interchange
               const otherSegs = segments.filter((s) => s.line_id !== segment.line_id);
-              const target = findInterchangeTarget(otherSegs, shifted.start_ms, shifted.end_ms);
+              const target = findInterchangeTarget(
+                otherSegs,
+                shifted.start_ms,
+                shifted.end_ms,
+                durationSeconds,
+                totalWidth
+              );
               currentTargetId = target ? target.line_id : null;
 
               setActiveDrag({
