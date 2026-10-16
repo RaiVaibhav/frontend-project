@@ -487,6 +487,55 @@ Implemented [`apps/web/src/store/alignmentReducer.ts`](apps/web/src/store/alignm
 
 - Lyric lines and segments maintain referential mapping via immutable `line_id` strings.
 
+---
+
+## Decision 013: Lyrics Pane Component (`LyricsList`), Placement Statistics & Transport Undo/Redo (Micro-Step 3B)
+
+- **Commit SHA**: `639f0a49bc42bbd92305372338ff9eb7ba1bf137` (`639f0a4`)
+- **Date**: 2026-10-16
+
+### Context
+
+The application layout requires a dedicated left pane presenting the song's lyric lines, their indexed order, placement status (`[ 0:14 - 0:18 ]` vs `Unplaced`), quick preview triggers, and selection states. During playback, the active line being sung must be highlighted and automatically scrolled into view. However, directly querying playback time on every 60fps tick could cause re-renders of all 28 lines 60 times a second.
+
+### Decision
+
+Implemented [`apps/web/src/lyrics/lyricsUtils.ts`](apps/web/src/lyrics/lyricsUtils.ts) and [`apps/web/src/lyrics/LyricsList.tsx`](apps/web/src/lyrics/LyricsList.tsx), mounted into [`apps/web/src/App.tsx`](apps/web/src/App.tsx):
+1. **Pure Geometry & Placement Helpers** (`lyricsUtils.ts`):
+   - `getLineSegmentMap`: Creates an O(1) map of `line_id -> AlignmentSegment`.
+   - `findActiveLineId`: Determines which line segment encompasses `timeMs`.
+   - `countPlacementStats`: Computes counts for total, placed, and unplaced lines.
+2. **Decoupled Playback Tracking in `LyricsList`**:
+   - Subscribes to `controller.subscribeTime`.
+   - Updates React `activeLineId` state *only* when the song transitions between line boundaries (occurring once every 2–5 seconds, ~0.3Hz), eliminating 60fps React churn while providing reactive UI styling.
+3. **Interactive Features**:
+   - Filter tabs: `All`, `Placed`, and `Unplaced` with real-time count badges.
+   - Follow Toggle: Smoothly auto-scrolls the active playing line into view via `scrollIntoView({ behavior: 'smooth', block: 'nearest' })`.
+   - Quick Play Snippet: Clicking any placed line pill immediately seeks audio to `segment.start_ms / 1000`.
+   - Line Selection: Primary click selects a line; `Cmd`/`Ctrl`/`Shift` toggles multi-selection.
+   - Line Un-placement: Direct delete button to un-place any segment.
+4. **Transport Controls & Keyboard Shortcuts**:
+   - Added Undo and Redo buttons to the top transport bar with disabled states (`canUndo`, `canRedo`).
+   - Wired global keyboard shortcuts: `Space` for play/pause, `Cmd+Z` / `Ctrl+Z` for undo, `Cmd+Shift+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` for redo.
+5. **Unit Tests with Vitest** ([`apps/web/src/lyrics/lyricsUtils.test.ts`](apps/web/src/lyrics/lyricsUtils.test.ts)):
+   - 3 unit tests verifying segment mapping, active line identification, and placement statistics (totaling 37 passing unit tests).
+
+### Rationale & Trade-offs
+
+- **Strict 60fps Rule Compliance**: Restricting state updates to line boundary transitions preserves 60fps rendering budgets for canvas playheads and waveforms.
+- **Two-Column Responsive Grid**: Sets up a layout (`minmax(320px, 380px) 1fr`) matching the wireframe design.
+- **Trade-off**: Scrolling during manual user interaction is suppressed unless the user leaves `Follow` enabled.
+
+### Alternatives Rejected
+
+- **Updating `activeLineId` on every 60fps frame**: Rejected because running React reconciliations across 28 line items at 60Hz wastes CPU and battery.
+- **Single column stacked layout**: Rejected because lyrics sheet and audio timeline must be simultaneously visible for interactive stamping and alignment.
+
+### Assumptions
+
+- Audio playback durations are non-negative and track line IDs remain stable throughout a session.
+
+
 
 
 
