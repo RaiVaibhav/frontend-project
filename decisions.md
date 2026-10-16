@@ -354,6 +354,51 @@ Implemented an isolated audio transport architecture:
 
 - Canvas waveforms and scrubbers will register direct listeners to `subscribeTime` to update visual indicators smoothly.
 
+---
+
+## Decision 010: Waveform Canvas Rendering & Hardware-Accelerated Playhead (Micro-Step 2D)
+
+- **Commit SHA**: `b45b32a6886e8e89574d7df6ce15fa25916053f3` (`b45b32a`)
+- **Date**: 2026-10-16
+
+### Context
+
+The application wireframe depicts an audio timeline featuring: (1) a time ruler with formatted interval ticks (`0:00`, `0:20`, `0:40`...), (2) a vertical mirrored waveform reflecting track amplitude, and (3) an interactive playhead needle showing the current playback position that allows click-and-drag seeking. Rendering must support High-DPI screens without blurring while guaranteeing 60fps playhead motion without React re-render penalties.
+
+### Decision
+
+Implemented [`apps/web/src/audio/WaveformCanvas.tsx`](apps/web/src/audio/WaveformCanvas.tsx) and [`apps/web/src/audio/waveformUtils.ts`](apps/web/src/audio/waveformUtils.ts):
+1. **Waveform Geometry Math** (`waveformUtils.ts`):
+   - `timeToPixel` and `pixelToTime`: Pure, boundary-clamped coordinate conversion functions.
+   - `calculateRulerTicks`: Dynamically generates timestamped tick markers (`0:00`, `0:20`, `0:40`...) based on track duration.
+2. **High-DPI Canvas Peak Painter** (`WaveformCanvas.tsx`):
+   - Renders symmetric amplitude bars around a vertical centerline matching the design aesthetic in `docs/wireframe.png`.
+   - Scales canvas coordinate space by `window.devicePixelRatio` to ensure sharp rendering on Retina displays.
+   - Paints time ruler ticks and borders in a dedicated upper lane (`rulerHeight = 24px`).
+3. **GPU-Composited 60fps Playhead Overlay**:
+   - Subscribes directly to `controller.subscribeTime(time => ...)` to update a playhead needle element via `transform: translate3d(x, 0, 0)`.
+   - Bypasses React Virtual DOM reconciliation completely, keeping frame rendering cost on the GPU compositor.
+4. **Interactive Seek & Drag**:
+   - `onMouseDown` and drag-to-scrub listener computes horizontal offset and calls `controller.seek(targetSeconds)`.
+5. **Unit Tests with Vitest** ([`apps/web/src/audio/waveformUtils.test.ts`](apps/web/src/audio/waveformUtils.test.ts)):
+   - Verified time-to-pixel mappings, pixel-to-time reverse calculations, boundary clamping, and ruler tick generation.
+
+### Rationale & Trade-offs
+
+- **Peak Static Canvas + GPU Dynamic Needle**: Separating the static peak drawing (runs on track load or resize) from the dynamic playhead needle (runs on GPU `translate3d`) avoids clearing and repainting the entire canvas on every frame.
+- **Pure Utility Seams**: Extracting geometry conversion into pure testable functions guarantees that mouse clicks and segment coordinates align with mathematical precision.
+- **Trade-off**: Requires synchronizing the canvas container's responsive width via `ResizeObserver`.
+
+### Alternatives Rejected
+
+- **Repainting the entire waveform canvas on every 60fps tick**: Rejected because continuous 60fps `clearRect` + 800-bar path operations consume substantial CPU/battery when the audio wave itself is completely static.
+- **SVG-based waveform**: Rejected because generating thousands of DOM `<rect>` elements causes high DOM memory overhead compared to a single `<canvas>`.
+
+### Assumptions
+
+- The playhead needle operates over the combined container width, with horizontal scrolling enabled when zoom factor > 1.
+
+
 
 
 
