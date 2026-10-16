@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Play, Pause, Music } from "lucide-react";
+import { Play, Pause, Music, Undo2, Redo2 } from "lucide-react";
 import { api, ApiError } from "./api";
 import type { TrackData } from "./types";
 import { useAudioPlayer } from "./audio/useAudioPlayer";
 import { decodeAudioFromUrl } from "./audio/decode";
 import { WaveformCanvas } from "./audio/WaveformCanvas";
 import { TimeClock } from "./audio/TimeClock";
+import { useAlignmentStore } from "./store/useAlignmentStore";
+import { LyricsList } from "./lyrics/LyricsList";
 
 export default function App() {
   const [track, setTrack] = useState<TrackData | null>(null);
@@ -15,7 +17,18 @@ export default function App() {
 
   const { isPlaying, togglePlay, load, controller } = useAudioPlayer();
 
-  // Fetch initial track from API
+  const {
+    state: alignmentState,
+    canUndo,
+    canRedo,
+    init,
+    selectLine,
+    deleteSegment,
+    undo,
+    redo,
+  } = useAlignmentStore();
+
+  // Fetch initial track from API and initialize alignment store
   useEffect(() => {
     let live = true;
 
@@ -23,6 +36,7 @@ export default function App() {
       .then((t) => {
         if (!live) return;
         setTrack(t);
+        init(t.lines, t.alignment?.segments ?? [], t.version);
         load(t.audio_url);
 
         // Fetch and decode audio samples for waveform visualization
@@ -51,7 +65,46 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [load]);
+  }, [load, init]);
+
+  // Global Keyboard Shortcuts (Space for play/pause, Ctrl+Z/Y for undo/redo)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Space to toggle play/pause
+      if (e.code === "Space") {
+        e.preventDefault();
+        togglePlay();
+      }
+
+      // Undo / Redo
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      if (cmdOrCtrl && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          if (canRedo) redo();
+        } else {
+          if (canUndo) undo();
+        }
+      } else if (cmdOrCtrl && (e.key === "y" || e.key === "Y")) {
+        e.preventDefault();
+        if (canRedo) redo();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [togglePlay, canUndo, canRedo, undo, redo]);
 
   if (error)
     return (
@@ -65,7 +118,7 @@ export default function App() {
   return (
     <div
       style={{
-        maxWidth: "1200px",
+        maxWidth: "1360px",
         margin: "0 auto",
         display: "flex",
         flexDirection: "column",
@@ -122,12 +175,13 @@ export default function App() {
           </div>
         </div>
 
-        {/* Center Playback Transport */}
+        {/* Center Playback Transport & Undo/Redo */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "var(--space-3)",
+            flexWrap: "wrap",
           }}
         >
           <button
@@ -154,70 +208,148 @@ export default function App() {
             controller={controller}
             durationSeconds={track.duration_seconds}
           />
+
+          <div
+            style={{
+              height: "20px",
+              width: "1px",
+              background: "var(--border)",
+              margin: "0 var(--space-1)",
+            }}
+          />
+
+          {/* Undo / Redo controls */}
+          <div style={{ display: "flex", gap: "var(--space-1)" }}>
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z / ⌘Z)"
+              style={{
+                padding: "6px 10px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "0.8rem",
+              }}
+            >
+              <Undo2 size={14} />
+              <span>Undo</span>
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Shift+Z / ⌘⇧Z)"
+              style={{
+                padding: "6px 10px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "0.8rem",
+              }}
+            >
+              <Redo2 size={14} />
+              <span>Redo</span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main Waveform Timeline Section */}
-      <section
+      {/* Main Two-Column Workspace */}
+      <div
         style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "var(--space-2)",
-          background: "var(--surface)",
-          padding: "var(--space-4)",
-          borderRadius: "var(--radius)",
-          border: "1px solid var(--border)",
+          display: "grid",
+          gridTemplateColumns: "minmax(320px, 380px) 1fr",
+          gap: "var(--space-4)",
+          alignItems: "start",
         }}
       >
+        {/* Left Column: Lyrics Sheet */}
+        <LyricsList
+          lines={alignmentState.lines}
+          segments={alignmentState.segments}
+          selectedLineIds={alignmentState.selectedLineIds}
+          controller={controller}
+          onSelectLine={selectLine}
+          onDeleteSegment={deleteSegment}
+          onSeekToTime={(timeSec) => controller.seek(timeSec)}
+        />
+
+        {/* Right Column: Waveform Timeline & Workspace */}
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+            flexDirection: "column",
+            gap: "var(--space-4)",
           }}
         >
-          <h2
+          {/* Waveform Section */}
+          <section
             style={{
-              fontSize: "0.95rem",
-              margin: 0,
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              color: "var(--text-muted)",
-            }}
-          >
-            Waveform & Timeline
-          </h2>
-          {isDecodingAudio && (
-            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              Decoding audio peaks…
-            </span>
-          )}
-        </div>
-
-        {peaks ? (
-          <WaveformCanvas
-            peaks={peaks}
-            durationSeconds={track.duration_seconds}
-            controller={controller}
-            height={160}
-          />
-        ) : (
-          <div
-            style={{
-              height: "160px",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(128,128,128,0.05)",
+              flexDirection: "column",
+              gap: "var(--space-2)",
+              background: "var(--surface)",
+              padding: "var(--space-4)",
               borderRadius: "var(--radius)",
-              color: "var(--text-muted)",
-              fontSize: "0.9rem",
+              border: "1px solid var(--border)",
             }}
           >
-            {isDecodingAudio ? "Extracting waveform peaks…" : "Loading audio…"}
-          </div>
-        )}
-      </section>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "0.95rem",
+                  margin: 0,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "var(--text-muted)",
+                }}
+              >
+                Waveform & Timeline
+              </h2>
+              {isDecodingAudio && (
+                <span
+                  style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}
+                >
+                  Decoding audio peaks…
+                </span>
+              )}
+            </div>
+
+            {peaks ? (
+              <WaveformCanvas
+                peaks={peaks}
+                durationSeconds={track.duration_seconds}
+                controller={controller}
+                height={160}
+              />
+            ) : (
+              <div
+                style={{
+                  height: "160px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(128,128,128,0.05)",
+                  borderRadius: "var(--radius)",
+                  color: "var(--text-muted)",
+                  fontSize: "0.9rem",
+                }}
+              >
+                {isDecodingAudio
+                  ? "Extracting waveform peaks…"
+                  : "Loading audio…"}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
+
