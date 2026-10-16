@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Play, Pause, Music, Undo2, Redo2 } from "lucide-react";
 import { api, ApiError } from "./api";
 import type { TrackData } from "./types";
@@ -9,6 +9,7 @@ import { TimeClock } from "./audio/TimeClock";
 import { useAlignmentStore } from "./store/useAlignmentStore";
 import { LyricsList } from "./lyrics/LyricsList";
 import { SegmentLane } from "./audio/SegmentLane";
+import { getLineIdRange, fitDroppedSegment } from "./audio/segmentUtils";
 
 export default function App() {
   const [track, setTrack] = useState<TrackData | null>(null);
@@ -26,11 +27,26 @@ export default function App() {
     setLines,
     addLine,
     selectLine,
+    selectMultiple,
     setSegment,
     deleteSegment,
+    nudgeSelected,
     undo,
     redo,
   } = useAlignmentStore();
+
+  const anchorLineIdRef = useRef<string | null>(null);
+
+  const handleSelectLine = (lineId: string, isMulti: boolean) => {
+    anchorLineIdRef.current = lineId;
+    selectLine(lineId, isMulti);
+  };
+
+  const handleSelectRange = (lineId: string) => {
+    const fromId = anchorLineIdRef.current || lineId;
+    const range = getLineIdRange(alignmentState.lines, fromId, lineId);
+    selectMultiple(range);
+  };
 
   // Fetch initial track from API and initialize alignment store
   useEffect(() => {
@@ -277,7 +293,8 @@ export default function App() {
           segments={alignmentState.segments}
           selectedLineIds={alignmentState.selectedLineIds}
           controller={controller}
-          onSelectLine={selectLine}
+          onSelectLine={handleSelectLine}
+          onSelectRange={handleSelectRange}
           onDeleteSegment={deleteSegment}
           onSeekToTime={(timeSec) => controller.seek(timeSec)}
           onSetLines={setLines}
@@ -338,14 +355,16 @@ export default function App() {
                 peaks={peaks}
                 durationSeconds={track.duration_seconds}
                 controller={controller}
-                height={190}
-                segmentLaneHeight={52}
+                height={220}
+                segmentLaneHeight={68}
                 onDropLine={(lineId, dropSeconds) => {
                   const dropMs = Math.round(dropSeconds * 1000);
                   const durationMs = Math.round(track.duration_seconds * 1000);
-                  const endMs = Math.min(dropMs + 3500, durationMs);
-                  setSegment(lineId, dropMs, endMs, durationMs);
-                  selectLine(lineId);
+                  const fitted = fitDroppedSegment(alignmentState.segments, dropMs, durationMs, 3500);
+                  if (fitted) {
+                    setSegment(lineId, fitted.start_ms, fitted.end_ms, durationMs);
+                    handleSelectLine(lineId, false);
+                  }
                 }}
               >
                 {(totalWidth) => (
@@ -355,7 +374,8 @@ export default function App() {
                     durationSeconds={track.duration_seconds}
                     totalWidth={totalWidth}
                     selectedLineIds={alignmentState.selectedLineIds}
-                    onSelectLine={selectLine}
+                    onSelectLine={handleSelectLine}
+                    onSelectRange={handleSelectRange}
                     onUpdateSegment={(lineId, startMs, endMs) =>
                       setSegment(
                         lineId,
@@ -364,15 +384,21 @@ export default function App() {
                         Math.round(track.duration_seconds * 1000)
                       )
                     }
+                    onNudgeSelected={(deltaMs) =>
+                      nudgeSelected(
+                        deltaMs,
+                        Math.round(track.duration_seconds * 1000)
+                      )
+                    }
                     onSeekToTime={(timeSec) => controller.seek(timeSec)}
-                    height={52}
+                    height={68}
                   />
                 )}
               </WaveformCanvas>
             ) : (
               <div
                 style={{
-                  height: "190px",
+                  height: "220px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",

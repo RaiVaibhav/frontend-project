@@ -15,6 +15,7 @@ export interface LyricsListProps {
   selectedLineIds: Set<string>;
   controller: AudioController;
   onSelectLine: (lineId: string, isMulti: boolean) => void;
+  onSelectRange?: (lineId: string) => void;
   onDeleteSegment: (lineId: string) => void;
   onSeekToTime: (timeSeconds: number) => void;
   onStampActiveLine?: (lineId: string) => void;
@@ -30,6 +31,7 @@ export function LyricsList({
   selectedLineIds,
   controller,
   onSelectLine,
+  onSelectRange,
   onDeleteSegment,
   onSeekToTime,
   onSetLines,
@@ -58,6 +60,14 @@ export function LyricsList({
       }));
     onSetLines(parsedLines);
     setPastedText('');
+  };
+
+  const handleAddSingleLine = () => {
+    const text = pastedText.trim();
+    if (onAddLine) {
+      onAddLine(text || 'New lyric line');
+      setPastedText('');
+    }
   };
 
   // Subscribe to playback time without 60fps React state churn:
@@ -155,7 +165,13 @@ export function LyricsList({
         <textarea
           value={pastedText}
           onChange={(e) => setPastedText(e.target.value)}
-          placeholder="Paste full lyrics..."
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleAddSingleLine();
+            }
+          }}
+          placeholder="Paste full lyrics or type a line and press Enter..."
           rows={2}
           style={{
             width: '100%',
@@ -191,7 +207,7 @@ export function LyricsList({
             Add all lines
           </button>
           <button
-            onClick={() => onAddLine?.('New lyric line')}
+            onClick={handleAddSingleLine}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -295,7 +311,13 @@ export function LyricsList({
                   if (el) lineRefs.current.set(line.id, el);
                   else lineRefs.current.delete(line.id);
                 }}
-                onClick={(e) => onSelectLine(line.id, e.metaKey || e.ctrlKey || e.shiftKey)}
+                onClick={(e) => {
+                  if (e.shiftKey && onSelectRange) {
+                    onSelectRange(line.id);
+                  } else {
+                    onSelectLine(line.id, e.metaKey || e.ctrlKey);
+                  }
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -318,7 +340,7 @@ export function LyricsList({
                   gap: 'var(--space-2)',
                 }}
               >
-                {/* Drag Handle ≡ & Line Index & Text */}
+                {/* Drag Handle ≡ & Text */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flex: 1, minWidth: 0 }}>
                   <span
                     style={{
@@ -330,18 +352,6 @@ export function LyricsList({
                     title="Drag onto waveform to place"
                   >
                     <GripVertical size={14} />
-                  </span>
-
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: '0.75rem',
-                      color: isActivePlaying ? 'var(--accent)' : 'var(--text-muted)',
-                      width: '20px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {String(line.index + 1).padStart(2, '0')}
                   </span>
 
                   <span

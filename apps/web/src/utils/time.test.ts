@@ -82,4 +82,29 @@ describe('nudgeSegments', () => {
     const clampedBackward = nudgeSegments(segments, new Set(['1']), -1500, 10000);
     expect(clampedBackward[0]).toEqual({ line_id: '1', start_ms: 0, end_ms: 2000 });
   });
+
+  it('prevents nudging selected segments into unselected segments', () => {
+    const segments = [
+      { line_id: '1', start_ms: 1000, end_ms: 3000 },
+      { line_id: '2', start_ms: 3500, end_ms: 5000 },
+      { line_id: '3', start_ms: 6000, end_ms: 8000 },
+    ];
+
+    // Nudging 1 & 2 right by 2000ms: line 2 hits unselected line 3 at 6000ms!
+    // Max shift is 6000 - 5000 = 1000ms.
+    const nudgedRight = nudgeSegments(segments, new Set(['1', '2']), 2000, 10000);
+    expect(nudgedRight[1].end_ms).toBe(6000);
+    expect(nudgedRight[1].start_ms).toBe(4500);
+    expect(nudgedRight[0].start_ms).toBe(2000);
+    expect(nudgedRight[0].end_ms).toBe(4000);
+
+    // Nudging 2 & 3 left by 2000ms: line 2 hits unselected line 1 at 3000ms!
+    // Max left shift is 3000 - 3500 = -500ms.
+    const nudgedLeft = nudgeSegments(segments, new Set(['2', '3']), -2000, 10000);
+    expect(nudgedLeft[1].start_ms).toBe(3000);
+    expect(nudgedLeft[1].end_ms).toBe(4500);
+    expect(nudgedLeft[2].start_ms).toBe(5500);
+    expect(nudgedLeft[2].end_ms).toBe(7500);
+  });
 });
+

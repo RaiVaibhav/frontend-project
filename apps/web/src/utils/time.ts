@@ -119,21 +119,47 @@ export function nudgeSegments(
 ): AlignmentSegment[] {
   if (lineIdsToNudge.size === 0 || deltaMs === 0) return segments;
 
-  // Check boundaries for all selected segments before applying delta
   let effectiveDelta = deltaMs;
 
-  for (const seg of segments) {
-    if (!lineIdsToNudge.has(seg.line_id)) continue;
+  const selected = segments.filter((s) => lineIdsToNudge.has(s.line_id));
+  const unselected = segments.filter((s) => !lineIdsToNudge.has(s.line_id));
 
-    // Check lower bound
+  // Check 0 and maxDurationMs bounds for all selected segments
+  for (const seg of selected) {
     if (seg.start_ms + effectiveDelta < 0) {
       effectiveDelta = -seg.start_ms;
     }
-    // Check upper bound
     if (seg.end_ms + effectiveDelta > maxDurationMs) {
       effectiveDelta = maxDurationMs - seg.end_ms;
     }
   }
+
+  // Check collision bounds with unselected segments
+  if (effectiveDelta > 0) {
+    for (const sel of selected) {
+      for (const unsel of unselected) {
+        if (unsel.start_ms >= sel.end_ms) {
+          const maxAllowedShift = unsel.start_ms - sel.end_ms;
+          if (effectiveDelta > maxAllowedShift) {
+            effectiveDelta = maxAllowedShift;
+          }
+        }
+      }
+    }
+  } else if (effectiveDelta < 0) {
+    for (const sel of selected) {
+      for (const unsel of unselected) {
+        if (unsel.end_ms <= sel.start_ms) {
+          const minAllowedShift = unsel.end_ms - sel.start_ms;
+          if (effectiveDelta < minAllowedShift) {
+            effectiveDelta = minAllowedShift;
+          }
+        }
+      }
+    }
+  }
+
+  if (effectiveDelta === 0) return segments;
 
   return segments.map((seg) => {
     if (!lineIdsToNudge.has(seg.line_id)) return seg;
