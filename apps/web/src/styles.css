@@ -13,8 +13,9 @@
  * so the scaffold does not make it for you.
  */
 
-:root {
-  /* Colour: light by default, dark below. Swap the values, or the whole idea. */
+:root,
+[data-theme='light'] {
+  /* Light Theme */
   --bg: #fbfbfa;
   --surface: #ffffff;
   --border: #e3e2df;
@@ -37,11 +38,11 @@
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
     'Liberation Mono', monospace;
 
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #17181a;
     --surface: #1f2124;
     --border: #33363b;
@@ -50,7 +51,20 @@
     --accent: #63b98c;
     --accent-contrast: #10231a;
     --danger: #e08472;
+    color-scheme: dark;
   }
+}
+
+[data-theme='dark'] {
+  --bg: #17181a;
+  --surface: #1f2124;
+  --border: #33363b;
+  --text: #e8e8e6;
+  --text-muted: #9a9c9f;
+  --accent: #63b98c;
+  --accent-contrast: #10231a;
+  --danger: #e08472;
+  color-scheme: dark;
 }
 
 *,

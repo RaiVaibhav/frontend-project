@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import type { AlignmentSegment, LyricLine } from '../types';
-import { formatTimeShort } from '../utils/time';
+import { formatTime, formatTimeShort } from '../utils/time';
 import {
   calculateSegmentBounds,
   dragTrimLeft,
@@ -49,6 +49,7 @@ export function SegmentLane({
     targetInterchangeId: string | null;
   } | null>(null);
   const [html5DragTargetId, setHtml5DragTargetId] = useState<string | null>(null);
+  const [hoveredLineId, setHoveredLineId] = useState<string | null>(null);
 
   // Line text map for fast lookup
   const lineMap = useMemo(() => {
@@ -395,6 +396,8 @@ export function SegmentLane({
                 onInterchangeSegments(sourceLineId, segment.line_id);
               }
             }}
+            onMouseEnter={() => setHoveredLineId(segment.line_id)}
+            onMouseLeave={() => setHoveredLineId((prev) => (prev === segment.line_id ? null : prev))}
             title={`${lineText} (${formatTimeShort(segment.start_ms)} - ${formatTimeShort(segment.end_ms)})`}
             style={{
               position: 'absolute',
@@ -432,6 +435,50 @@ export function SegmentLane({
               overflow: 'visible',
             }}
           >
+            {/* Full Lyric Hover Preview Card */}
+            {hoveredLineId === segment.line_id && !isBeingDragged && !isInterchangeTarget && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 8px)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  border: '1px solid var(--accent)',
+                  borderRadius: 'var(--radius)',
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  zIndex: 50,
+                  pointerEvents: 'none',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                  textAlign: 'center',
+                  maxWidth: '380px',
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>"{lineText}"</span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>
+                  {formatTime(segment.start_ms)} – {formatTime(segment.end_ms)}
+                </span>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    borderWidth: '5px',
+                    borderStyle: 'solid',
+                    borderColor: 'var(--accent) transparent transparent transparent',
+                  }}
+                />
+              </div>
+            )}
+
             {/* Interchange Floating Target Badge */}
             {isInterchangeTarget && (
               <div

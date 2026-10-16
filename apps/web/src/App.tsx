@@ -1,9 +1,26 @@
 import { useEffect, useState, useRef } from "react";
-import { Play, Pause, Music, Undo2, Redo2, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  Play,
+  Pause,
+  Music,
+  Undo2,
+  Redo2,
+  ZoomIn,
+  ZoomOut,
+  Sun,
+  Moon,
+  Upload,
+  Download,
+  Check,
+  Copy,
+  FileText,
+  X,
+} from "lucide-react";
 import { api, ApiError } from "./api";
 import type { TrackData } from "./types";
 import { useAudioPlayer } from "./audio/useAudioPlayer";
-import { decodeAudioFromUrl } from "./audio/decode";
+import { decodeAudioFromUrl, decodeAudioFromFile } from "./audio/decode";
+import { exportLrc } from "./utils/lrc";
 import { WaveformCanvas } from "./audio/WaveformCanvas";
 import { TimeClock } from "./audio/TimeClock";
 import { useAlignmentStore } from "./store/useAlignmentStore";
@@ -19,6 +36,29 @@ export default function App() {
   const [isDecodingAudio, setIsDecodingAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+
+  // Theme state: persists to localStorage and applies data-theme attribute
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const saved = typeof localStorage !== "undefined" ? localStorage.getItem("lyric-theme") : null;
+    if (saved === "dark" || saved === "light") return saved;
+    return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("lyric-theme", theme);
+  }, [theme]);
+
+  // Audio upload state
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+
+  // LRC Export modal state
+  const [lrcExportModalOpen, setLrcExportModalOpen] = useState(false);
+  const [lrcContent, setLrcContent] = useState("");
+  const [copiedLrc, setCopiedLrc] = useState(false);
 
   const { isPlaying, togglePlay, load, controller } = useAudioPlayer();
 
@@ -55,6 +95,78 @@ export default function App() {
     const fromId = anchorLineIdRef.current || lineId;
     const range = getLineIdRange(alignmentState.lines, fromId, lineId);
     selectMultiple(range);
+  };
+
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingAudio(true);
+      setError(null);
+
+      const decoded = await decodeAudioFromFile(file);
+      const objectUrl = URL.createObjectURL(file);
+      load(objectUrl);
+
+      const title = file.name.replace(/\.[^/.]+$/, '');
+      const newTrack: TrackData = {
+        id: `local-${Date.now()}`,
+        title,
+        artist: 'User Track',
+        audio_url: objectUrl,
+        duration_seconds: decoded.durationSeconds,
+        lines: alignmentState.lines.length > 0 ? alignmentState.lines : track?.lines || [],
+        version: track?.version ?? 0,
+        alignment: { segments: alignmentState.segments },
+      };
+
+      setTrack(newTrack);
+      setPeaks(decoded.peaks);
+    } catch (err) {
+      console.error('Audio upload failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to decode audio file');
+    } finally {
+      setIsUploadingAudio(false);
+      if (audioInputRef.current) {
+        audioInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleOpenExportLrc = () => {
+    if (!track) return;
+    const content = exportLrc(
+      { title: track.title, artist: track.artist },
+      alignmentState.lines,
+      alignmentState.segments
+    );
+    setLrcContent(content);
+    setLrcExportModalOpen(true);
+  };
+
+  const handleDownloadLrc = () => {
+    if (!lrcContent || !track) return;
+    const blob = new Blob([lrcContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${track.title || 'lyrics'}.lrc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyLrc = async () => {
+    if (!lrcContent) return;
+    try {
+      await navigator.clipboard.writeText(lrcContent);
+      setCopiedLrc(true);
+      setTimeout(() => setCopiedLrc(false), 2000);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
   };
 
   // Fetch initial track from API and initialize alignment store
@@ -294,6 +406,83 @@ export default function App() {
               <span>Redo</span>
             </button>
           </div>
+        </div>
+
+        {/* Right Action Tools: Upload Audio, Export LRC, Theme Switcher */}
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          {/* Audio Upload File Input */}
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
+            onChange={handleAudioUpload}
+            style={{ display: "none" }}
+          />
+          <button
+            onClick={() => audioInputRef.current?.click()}
+            disabled={isUploadingAudio}
+            title="Upload custom audio track (MP3, WAV, OGG, FLAC)"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              fontSize: "0.8rem",
+              fontWeight: 500,
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            <Upload size={14} />
+            <span>{isUploadingAudio ? "Decoding Audio..." : "Upload Audio"}</span>
+          </button>
+
+          {/* Export LRC Button */}
+          <button
+            onClick={handleOpenExportLrc}
+            title="Export timed lyrics as a standard .LRC file"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              fontSize: "0.8rem",
+              fontWeight: 500,
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            <Download size={14} />
+            <span>Export .LRC</span>
+          </button>
+
+          {/* Theme Switcher Button */}
+          <button
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            title={`Switch to ${theme === "dark" ? "Light" : "Dark"} theme`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 11px",
+              fontSize: "0.8rem",
+              fontWeight: 500,
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            {theme === "dark" ? <Sun size={14} color="#f59e0b" /> : <Moon size={14} color="#6366f1" />}
+            <span style={{ fontSize: "0.78rem" }}>{theme === "dark" ? "Light" : "Dark"}</span>
+          </button>
         </div>
       </header>
 
@@ -566,6 +755,170 @@ export default function App() {
           onSeekToTime={(timeSec) => controller.seek(timeSec)}
         />
       </div>
+
+      {/* Export LRC Modal */}
+      {lrcExportModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.65)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "var(--space-4)",
+          }}
+          onClick={() => setLrcExportModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              width: "100%",
+              maxWidth: "540px",
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 16px 36px rgba(0, 0, 0, 0.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "var(--space-3) var(--space-4)",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <FileText size={18} color="var(--accent)" />
+                <h3 style={{ margin: 0, fontSize: "1rem" }}>Export Standard .LRC File</h3>
+              </div>
+              <button
+                onClick={() => setLrcExportModalOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-muted)",
+                  padding: "4px",
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body: LRC Preview */}
+            <div
+              style={{
+                padding: "var(--space-4)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "var(--space-3)",
+                overflow: "hidden",
+                flex: 1,
+              }}
+            >
+              <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                Standard time-coded LRC file generated from your {alignmentState.segments.length} placed lyric lines:
+              </p>
+              <textarea
+                readOnly
+                value={lrcContent}
+                style={{
+                  width: "100%",
+                  height: "260px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.8rem",
+                  padding: "var(--space-3)",
+                  background: "rgba(0, 0, 0, 0.15)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  color: "var(--text)",
+                  resize: "none",
+                  whiteSpace: "pre",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "var(--space-3) var(--space-4)",
+                borderTop: "1px solid var(--border)",
+                background: "rgba(0, 0, 0, 0.04)",
+              }}
+            >
+              <button
+                onClick={handleCopyLrc}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 14px",
+                  fontSize: "0.82rem",
+                  borderRadius: "var(--radius)",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  cursor: "pointer",
+                }}
+              >
+                {copiedLrc ? <Check size={14} color="var(--accent)" /> : <Copy size={14} />}
+                <span>{copiedLrc ? "Copied!" : "Copy to Clipboard"}</span>
+              </button>
+
+              <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                <button
+                  onClick={() => setLrcExportModalOpen(false)}
+                  style={{
+                    padding: "8px 14px",
+                    fontSize: "0.82rem",
+                    borderRadius: "var(--radius)",
+                    border: "1px solid var(--border)",
+                    background: "transparent",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handleDownloadLrc}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 16px",
+                    fontSize: "0.82rem",
+                    fontWeight: 600,
+                    borderRadius: "var(--radius)",
+                    border: "none",
+                    background: "var(--accent)",
+                    color: "var(--accent-contrast)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <Download size={14} />
+                  <span>Download .LRC</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
