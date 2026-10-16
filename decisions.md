@@ -1008,6 +1008,52 @@ Users reported two usability friction points in the editor:
 
 - Merging lines combines text with a single intervening space and preserves the earliest line's identifier.
 
+---
+
+## Decision 025: Decouple Playhead Needle Drag from Auto-Scroll & Controlled Edge Auto-Pan
+
+- **Commit SHA**: `390a4b829cef9be7660726a7d0dbfdf2c384f28d` (`390a4b8`)
+- **Date**: 2026-10-16
+
+### Context
+
+When zoomed in (e.g. 2x, 3x, or 5x), dragging the playhead needle to scrub along the timeline caused the viewport to violently and uncontrollably rocket across the track. Investigation revealed a positive feedback loop:
+1. `handleSeekFromEvent` computed timestamp from `e.clientX - canvas.getBoundingClientRect().left`.
+2. Calling `controller.seek(targetSeconds)` synchronously triggered `subscribeTime`.
+3. `subscribeTime` was not checking whether a manual drag was active (`isDraggingRef.current`), so it immediately forced `container.scrollLeft = pixelX - viewportW * 0.38`.
+4. As the container scrolled right, `canvas.getBoundingClientRect().left` shifted left by hundreds of pixels.
+5. On the very next 1px mouse movement, `e.clientX - rect.left` jumped by hundreds of pixels, triggering another scroll, accelerating the playhead exponentially to the end of the track.
+
+### Decision
+
+1. **Decouple Manual Drag from Viewport Auto-Centering** ([`apps/web/src/audio/WaveformCanvas.tsx`](apps/web/src/audio/WaveformCanvas.tsx)):
+   - Added `if (isDraggingRef.current) return;` inside `subscribeTime`. When the user is manually dragging the playhead, the 60fps playback centering ticker never overrides or jerks the viewport.
+   - Restricted auto-centering strictly to when audio is actively playing (`controller.isPlaying`).
+
+2. **Absolute Viewport-to-Canvas Coordinate Conversion**:
+   - Implemented `getTimeFromClientX(clientX: number)`:
+     ```ts
+     const mouseXInViewport = clientX - containerRect.left;
+     const canvasX = Math.max(0, Math.min(totalWidth, mouseXInViewport + container.scrollLeft));
+     return pixelToTime(canvasX, totalWidth, durationSeconds);
+     ```
+   - Completely decouples mouse-coordinate math from the shifting bounding rect of the inner canvas, eliminating the runaway feedback loop.
+
+3. **Smooth, Controlled Edge Auto-Pan Loop**:
+   - Implemented RAF-driven edge auto-panning (`startEdgePan` / `stopEdgePan`).
+   - Safe zone: When dragging within the visible viewport (`edgeZone > 60px`), the container stays completely still, giving the user 100% stable 1:1 needle control.
+   - Edge zone: When the user intentionally scrubs within 60px of the left or right edge, the viewport glides smoothly at a comfortable, proportional speed (2px to 10px per frame, ~120–600px/s) and continuously synchronizes playback seek under the cursor.
+   - Cleanly terminates on `mouseup` or component unmount.
+
+### Rationale & Trade-offs
+
+- **Zero Runaway Feedback**: Calculating coordinates relative to the outer container and disabling playback auto-follow during user drag restores surgical, predictable scrubbing at all zoom levels (1x–5x).
+- **Proportional Edge Scrolling**: Emulating professional DAW edge-panning gives users the ability to scrub continuously through minutes of audio without releasing the mouse.
+
+### Assumptions
+
+- An edge activation boundary of 60px provides an intuitive balance between stable on-screen scrubbing and smooth continuous track navigation.
+
 
 
 
