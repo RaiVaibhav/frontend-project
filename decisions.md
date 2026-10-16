@@ -1139,6 +1139,42 @@ When long lyric sentences played in the Karaoke Teleprompter banner (`KaraokeBan
 
 - Long sentences wrap based on standard word boundaries, maintaining center alignment for visual balance.
 
+---
+
+## Decision 028: Zero-Width Overlay Trim Handles and Exact Lyric Start/End Timeline Positioning
+
+- **Commit SHA**: `1fc2212cb55af38256352cbd46667128333770c8` (`1fc2212`)
+- **Date**: 2026-10-16
+
+### Context
+
+Users observed that timeline segment blocks had left and right slider handles occupying in-flow layout pixels (10px each, 20px total) inside the segment container. This produced two critical visual errors:
+1. The lyric text was pushed 10px inward from the left boundary (`start_ms`) and cut off 10px before the right boundary (`end_ms`), causing the playhead needle to reach the segment 10–16 pixels before the lyric appeared to start, and leaving the lyric 10 pixels before the segment ended.
+2. Short words (e.g. "Oh" or quick syllables) suffered from width inflation caused by artificial `minWidth: 28px` constraints required to accommodate the in-flow handles, displacing neighboring timing alignment.
+
+### Decision
+
+1. **Zero-Width Overlay Trim Handles** ([`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx), [`apps/web/src/styles.css`](apps/web/src/styles.css)):
+   - Replaced in-flow flex trim slider elements with `position: 'absolute'` overlay grips positioned directly at `left: 0` and `right: 0` (`width: 8px`, `zIndex: 5`).
+   - Handles feature a 2px vertical grip pill matching the low-fi DAW aesthetic in `docs/wireframe.png`, with subtle illumination on hover (`.segment-trim-handle-left:hover`, `.segment-trim-handle-right:hover`).
+   - Added `e.stopPropagation()` on handle mousedown so edge trimming does not trigger body drag or selection toggling.
+2. **Full-Span Segment Body**:
+   - The segment body spans 100% width and height of the segment container with minimal padding (`padding: '0 8px'`).
+   - The lyric text starts directly at the left boundary of the segment (`start_ms`), and ends at the right boundary (`end_ms`), completely eliminating the 10px offset dead zone.
+3. **Exact Pixel Bounds without Inflation** ([`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUtils.ts), [`apps/web/src/audio/segmentUtils.test.ts`](apps/web/src/audio/segmentUtils.test.ts)):
+   - Removed `minWidth: '28px'` from the segment container in `SegmentLane.tsx`.
+   - Updated `minBlockWidthPx` default to `8px` in `calculateSegmentBounds`, ensuring natural width scaling down to short syllables while maintaining clickable targets for sub-pixel clips.
+
+### Rationale & Trade-offs
+
+- **1:1 Audio & Visual Alignment**: When the playhead needle touches the left border of a segment, the audio and lyric start simultaneously with zero dead zone.
+- **Zero Layout Squeeze**: Overlay handles occupy zero layout flow width, allowing short segments to display their lyrics without being pushed out of the box.
+
+### Assumptions
+
+- An 8px interactive edge overlay provides a comfortable mouse grab zone while preserving the central body for segment shifting and selection.
+
+
 
 
 
