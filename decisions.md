@@ -579,6 +579,49 @@ Implemented [`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUti
 
 - The minimum segment duration remains 200ms to avoid zero-width segment states.
 
+---
+
+## Decision 015: Left Sidebar Lyric Ingestion & Drag-to-Place on Waveform (Micro-Step 3D)
+
+- **Commit SHA**: `37da020615fb3e89bf8ef877085a6a3aeafcaae3` (`37da020`)
+- **Date**: 2026-10-16
+
+### Context
+
+The application wireframe features a dedicated ingestion box at the top of the left sidebar containing a `"Paste full lyrics..."` textarea, an `Add all lines` batch parser, a `+ Add line` button, and line drag handles (`≡`) annotated with *"drag line onto waveform to place"*. This enables quick lyric entry and intuitive spatial placement onto the audio track without tedious manual time entry.
+
+### Decision
+
+Implemented full sidebar ingestion and timeline drag-and-drop:
+1. **Reducer & Store Extension**:
+   - Added `ADD_LINE` action to [`alignmentReducer.ts`](apps/web/src/store/alignmentReducer.ts) with full undo/redo history recording and automated zero-based index assignment.
+   - Added unit test in [`alignmentReducer.test.ts`](apps/web/src/store/alignmentReducer.test.ts) (totaling 46 passing unit tests).
+   - Exposed `addLine` in [`useAlignmentStore.ts`](apps/web/src/store/useAlignmentStore.ts).
+2. **`LyricsList` Ingestion UI** ([`apps/web/src/lyrics/LyricsList.tsx`](apps/web/src/lyrics/LyricsList.tsx)):
+   - Added dashed `"Paste full lyrics..."` textarea matching the wireframe aesthetic.
+   - Added `Add all lines` (splits text by line breaks, strips empty lines, and batch updates the store) and `+ Add line` buttons.
+   - Added `LINES · N` and `N placed` wireframe subheaders.
+   - Added `GripVertical` (`≡`) drag handles and native HTML5 `draggable` attributes to line cards (`e.dataTransfer.setData('text/plain', line.id)`).
+3. **Timeline Drag-and-Drop Ingestion** ([`apps/web/src/audio/WaveformCanvas.tsx`](apps/web/src/audio/WaveformCanvas.tsx)):
+   - Added `handleDragOver` and `handleDrop` handlers to the canvas container.
+   - Converts the drop event's horizontal coordinate (`e.clientX`) into an exact timestamp (`pixelToTime`).
+   - Automatically initializes a clamped segment spanning `[dropMs, dropMs + 3500ms]` and selects the dropped line.
+
+### Rationale & Trade-offs
+
+- **Zero External Drag-and-Drop Dependencies**: Leveraging native HTML5 drag-and-drop (`draggable`, `dataTransfer`) allows dragging elements across disconnected React component trees (`LyricsList` -> `WaveformCanvas`) with zero bundle size cost.
+- **Immediate User Feedback**: Dropping a line onto the waveform creates a visible segment block instantly, updates the placed count badge, and selects the block for immediate trimming.
+- **Trade-off**: Dropped segments default to a reasonable 3.5-second initial duration, which the user can immediately refine using the left/right trim handles.
+
+### Alternatives Rejected
+
+- **External drag libraries (`dnd-kit`, `react-beautiful-dnd`)**: Rejected to avoid large third-party runtime bundles when native HTML5 drag-and-drop handles cross-container dragging seamlessly.
+
+### Assumptions
+
+- Pasted lyrics contain one lyric line per line break.
+
+
 
 
 
