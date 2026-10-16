@@ -39,6 +39,7 @@ export default function App() {
     interchangeGroup,
     splitSegment,
     mergeWithNext,
+    mergeLines,
     undo,
     redo,
   } = useAlignmentStore();
@@ -558,6 +559,7 @@ export default function App() {
           onDeleteSegment={deleteSegment}
           onSplitSegment={splitSegment}
           onMergeWithNext={mergeWithNext}
+          onMergeLines={mergeLines}
           onNudgeSelected={(deltaMs) =>
             nudgeSelected(deltaMs, Math.round(track.duration_seconds * 1000))
           }

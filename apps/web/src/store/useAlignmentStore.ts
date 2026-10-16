@@ -59,6 +59,10 @@ export function useAlignmentStore() {
     dispatch({ type: 'MERGE_WITH_NEXT', payload: { line_id } });
   }, []);
 
+  const mergeLines = useCallback((firstLineId: string, secondLineId: string) => {
+    dispatch({ type: 'MERGE_LINES', payload: { firstLineId, secondLineId } });
+  }, []);
+
   const selectLine = useCallback((line_id: string, isMulti = false) => {
     dispatch({ type: 'SELECT_LINE', payload: { line_id, isMulti } });
   }, []);
@@ -106,6 +110,7 @@ export function useAlignmentStore() {
       interchangeGroup,
       splitSegment,
       mergeWithNext,
+      mergeLines,
       selectLine,
       selectMultiple,
       clearSelection,
@@ -129,6 +134,7 @@ export function useAlignmentStore() {
       interchangeGroup,
       splitSegment,
       mergeWithNext,
+      mergeLines,
       selectLine,
       selectMultiple,
       clearSelection,

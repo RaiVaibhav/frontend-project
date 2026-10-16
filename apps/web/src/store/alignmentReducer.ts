@@ -29,6 +29,7 @@ export type AlignmentAction =
   | { type: 'INTERCHANGE_GROUP'; payload: { sourceLineIds: string[]; targetLineId: string } }
   | { type: 'SPLIT_SEGMENT'; payload: { line_id: string; splitTextFirst: string; splitTextSecond: string; splitTimeMs: number } }
   | { type: 'MERGE_WITH_NEXT'; payload: { line_id: string } }
+  | { type: 'MERGE_LINES'; payload: { firstLineId: string; secondLineId: string } }
   | { type: 'SELECT_LINE'; payload: { line_id: string; isMulti: boolean } }
   | { type: 'SELECT_MULTIPLE'; payload: { line_ids: string[] } }
   | { type: 'CLEAR_SELECTION' }
@@ -62,6 +63,77 @@ function recordHistory(state: AlignmentState): { past: StateSnapshot[]; future: 
   return {
     past: newPast,
     future: [], // New user action clears redo future
+  };
+}
+
+function executeMergeTwoLines(
+  state: AlignmentState,
+  firstId: string,
+  secondId: string
+): AlignmentState {
+  const lineA = state.lines.find((l) => l.id === firstId);
+  const lineB = state.lines.find((l) => l.id === secondId);
+  if (!lineA || !lineB || lineA.id === lineB.id) return state;
+
+  const segA = state.segments.find((s) => s.line_id === lineA.id);
+  const segB = state.segments.find((s) => s.line_id === lineB.id);
+
+  // Determine chronological or document order
+  let firstLine = lineA;
+  let secondLine = lineB;
+  let firstSeg = segA;
+  let secondSeg = segB;
+
+  if (segA && segB) {
+    if (segA.start_ms > segB.start_ms) {
+      firstLine = lineB;
+      secondLine = lineA;
+      firstSeg = segB;
+      secondSeg = segA;
+    }
+  } else if (lineA.index > lineB.index) {
+    firstLine = lineB;
+    secondLine = lineA;
+    firstSeg = segB;
+    secondSeg = segA;
+  }
+
+  const history = recordHistory(state);
+
+  const mergedText = `${firstLine.text} ${secondLine.text}`.trim();
+  const mergedLine: LyricLine = { ...firstLine, text: mergedText };
+
+  // Re-index remaining lines sequentially
+  const updatedLines = state.lines
+    .filter((l) => l.id !== secondLine.id)
+    .map((l) => (l.id === firstLine.id ? mergedLine : l))
+    .map((l, idx) => ({ ...l, index: idx }));
+
+  let updatedSegments = state.segments.filter((s) => s.line_id !== secondLine.id);
+  if (firstSeg && secondSeg) {
+    updatedSegments = updatedSegments.map((s) =>
+      s.line_id === firstLine.id
+        ? {
+            line_id: firstLine.id,
+            start_ms: Math.min(firstSeg!.start_ms, secondSeg!.start_ms),
+            end_ms: Math.max(firstSeg!.end_ms, secondSeg!.end_ms),
+          }
+        : s
+    );
+  } else if (secondSeg && !firstSeg) {
+    updatedSegments.push({
+      line_id: firstLine.id,
+      start_ms: secondSeg.start_ms,
+      end_ms: secondSeg.end_ms,
+    });
+  }
+
+  return {
+    ...state,
+    lines: updatedLines,
+    segments: updatedSegments,
+    selectedLineIds: new Set([firstLine.id]),
+    history,
   };
 }
 
@@ -308,41 +380,13 @@ export function alignmentReducer(state: AlignmentState, action: AlignmentAction)
       const lineIndex = state.lines.findIndex((l) => l.id === line_id);
       if (lineIndex < 0 || lineIndex >= state.lines.length - 1) return state;
 
-      const firstLine = state.lines[lineIndex];
-      const secondLine = state.lines[lineIndex + 1];
+      const nextLine = state.lines[lineIndex + 1];
+      return executeMergeTwoLines(state, line_id, nextLine.id);
+    }
 
-      const firstSeg = state.segments.find((s) => s.line_id === firstLine.id);
-      const secondSeg = state.segments.find((s) => s.line_id === secondLine.id);
-
-      const history = recordHistory(state);
-
-      const mergedText = `${firstLine.text} ${secondLine.text}`.trim();
-      const mergedLine: LyricLine = { ...firstLine, text: mergedText };
-
-      const updatedLines = [
-        ...state.lines.slice(0, lineIndex),
-        mergedLine,
-        ...state.lines.slice(lineIndex + 2).map((l) => ({ ...l, index: l.index - 1 })),
-      ];
-
-      let updatedSegments = state.segments.filter((s) => s.line_id !== secondLine.id);
-      if (firstSeg && secondSeg) {
-        updatedSegments = updatedSegments.map((s) =>
-          s.line_id === firstLine.id
-            ? { line_id: firstLine.id, start_ms: Math.min(firstSeg.start_ms, secondSeg.start_ms), end_ms: Math.max(firstSeg.end_ms, secondSeg.end_ms) }
-            : s
-        );
-      } else if (secondSeg && !firstSeg) {
-        updatedSegments.push({ line_id: firstLine.id, start_ms: secondSeg.start_ms, end_ms: secondSeg.end_ms });
-      }
-
-      return {
-        ...state,
-        lines: updatedLines,
-        segments: updatedSegments,
-        selectedLineIds: new Set([firstLine.id]),
-        history,
-      };
+    case 'MERGE_LINES': {
+      const { firstLineId, secondLineId } = action.payload;
+      return executeMergeTwoLines(state, firstLineId, secondLineId);
     }
 
     case 'SELECT_LINE': {

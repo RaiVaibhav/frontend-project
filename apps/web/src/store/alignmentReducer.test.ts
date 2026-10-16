@@ -143,6 +143,40 @@ describe('alignmentReducer', () => {
     expect(state.segments[0]).toEqual({ line_id: '1', start_ms: 1000, end_ms: 5500 });
   });
 
+  it('merges two specific lines by ID in any order and preserves chronological timing', () => {
+    let state = getLoadedState();
+
+    // Pass second line first, first line second
+    state = alignmentReducer(state, {
+      type: 'MERGE_LINES',
+      payload: { firstLineId: '2', secondLineId: '1' },
+    });
+
+    expect(state.lines.length).toBe(2);
+    // Line 1 started earlier (1000ms vs 3500ms), so it comes first
+    expect(state.lines[0].text).toBe('First line of the song Second line of the song');
+    expect(state.lines[0].index).toBe(0);
+    expect(state.lines[1].id).toBe('3');
+    expect(state.lines[1].index).toBe(1);
+    expect(state.segments.length).toBe(1);
+    expect(state.segments[0]).toEqual({ line_id: '1', start_ms: 1000, end_ms: 5500 });
+  });
+
+  it('merges a placed line with an unplaced line', () => {
+    let state = getLoadedState(); // Line 3 is unplaced
+
+    state = alignmentReducer(state, {
+      type: 'MERGE_LINES',
+      payload: { firstLineId: '2', secondLineId: '3' },
+    });
+
+    expect(state.lines.length).toBe(2);
+    expect(state.lines[1].text).toBe('Second line of the song Third line of the song');
+    // Segment for line 2 should remain
+    const seg2 = state.segments.find((s) => s.line_id === '2');
+    expect(seg2).toEqual({ line_id: '2', start_ms: 3500, end_ms: 5500 });
+  });
+
   it('reorders lines and re-indexes properly', () => {
     let state = getLoadedState();
 

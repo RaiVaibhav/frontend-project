@@ -5,7 +5,6 @@ import {
   Trash2,
   Combine,
   Play,
-  ArrowRight,
 } from 'lucide-react';
 import type { LyricLine, AlignmentSegment } from '../types';
 import { formatTime, parseTimeToMs } from '../utils/time';
@@ -24,6 +23,7 @@ export interface SegmentInspectorProps {
     splitTimeMs: number
   ) => void;
   onMergeWithNext: (lineId: string) => void;
+  onMergeLines?: (firstLineId: string, secondLineId: string) => void;
   onNudgeSelected: (deltaMs: number) => void;
   onSeekToTime?: (timeSeconds: number) => void;
 }
@@ -37,6 +37,7 @@ export function SegmentInspector({
   onDeleteSegment,
   onSplitSegment,
   onMergeWithNext,
+  onMergeLines,
   onNudgeSelected,
   onSeekToTime,
 }: SegmentInspectorProps) {
@@ -56,8 +57,9 @@ export function SegmentInspector({
   const [endInput, setEndInput] = useState('');
   const [timeError, setTimeError] = useState<string | null>(null);
 
-  // Split segment modal / inline tool state
+  // Split & Merge modal / inline tool states
   const [isSplitting, setIsSplitting] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
   const [splitText1, setSplitText1] = useState('');
   const [splitText2, setSplitText2] = useState('');
   const [splitTimeMs, setSplitTimeMs] = useState(0);
@@ -74,6 +76,7 @@ export function SegmentInspector({
       setTimeError(null);
     }
     setIsSplitting(false);
+    setIsMerging(false);
   }, [singleSeg?.start_ms, singleSeg?.end_ms, singleLine?.id]);
 
   const handleStartBlur = () => {
@@ -451,34 +454,136 @@ export function SegmentInspector({
                 </span>
 
                 {/* Merge with next */}
-                <button
-                  onClick={() => onMergeWithNext(singleLine.id)}
-                  disabled={!hasNextLine}
-                  title={
-                    hasNextLine
-                      ? `Merge with: "${nextLine?.text}"`
-                      : 'No subsequent line to merge with'
-                  }
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 10px',
-                    fontSize: '0.78rem',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface)',
-                    color: hasNextLine ? 'var(--text)' : 'var(--text-muted)',
-                    cursor: hasNextLine ? 'pointer' : 'not-allowed',
-                    textAlign: 'left',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Combine size={13} />
-                    <span>Merge with next line</span>
+                {hasNextLine && nextLine ? (
+                  <div
+                    style={{
+                      background: isMerging ? 'rgba(99, 185, 140, 0.08)' : 'var(--surface)',
+                      border: isMerging ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      padding: '8px 10px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div
+                      onClick={() => setIsMerging((prev) => !prev)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Combine size={13} color={isMerging ? 'var(--accent)' : 'currentColor'} />
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Merge with next line</span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          color: isMerging ? 'var(--accent)' : 'var(--text-muted)',
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          background: 'rgba(0, 0, 0, 0.1)',
+                        }}
+                      >
+                        {isMerging ? 'Close' : `Line #${nextLine.index + 1}`}
+                      </span>
+                    </div>
+
+                    {isMerging && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                          Merging Line #{singleLine.index + 1} with Line #{nextLine.index + 1}:
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.72rem',
+                            background: 'rgba(0, 0, 0, 0.15)',
+                            padding: '6px 8px',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px',
+                          }}
+                        >
+                          <div>
+                            <span style={{ color: 'var(--text-muted)' }}>Target: </span>
+                            <strong>"{nextLine.text}"</strong>
+                          </div>
+                          <div
+                            style={{
+                              borderTop: '1px solid var(--border)',
+                              paddingTop: '3px',
+                              color: 'var(--accent)',
+                            }}
+                          >
+                            <span style={{ color: 'var(--text-muted)' }}>Result: </span>
+                            <strong>"{singleLine.text} {nextLine.text}"</strong>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                          <button
+                            onClick={() => {
+                              onMergeWithNext(singleLine.id);
+                              setIsMerging(false);
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              background: 'var(--accent)',
+                              color: 'var(--accent-contrast)',
+                              border: 'none',
+                              borderRadius: '3px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Confirm Merge
+                          </button>
+                          <button
+                            onClick={() => setIsMerging(false)}
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: '0.75rem',
+                              background: 'transparent',
+                              border: '1px solid var(--border)',
+                              color: 'var(--text-muted)',
+                              borderRadius: '3px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {hasNextLine && <ArrowRight size={12} style={{ opacity: 0.5 }} />}
-                </button>
+                ) : (
+                  <button
+                    disabled
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 10px',
+                      fontSize: '0.78rem',
+                      borderRadius: 'var(--radius)',
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface)',
+                      color: 'var(--text-muted)',
+                      cursor: 'not-allowed',
+                      opacity: 0.5,
+                    }}
+                  >
+                    <Combine size={13} />
+                    <span>No subsequent line to merge with</span>
+                  </button>
+                )}
 
                 {/* Split segment */}
                 <button
@@ -680,6 +785,115 @@ export function SegmentInspector({
               {selectedLines.filter((l) => segmentMap.has(l.id)).length} of {selectedLines.length} placed on timeline
             </div>
           </div>
+
+          {/* Merge 2 Selected Lines Action */}
+          {selectedLines.length === 2 && (() => {
+            const [firstSel, secondSel] = [...selectedLines].sort((a, b) => {
+              const segA = segmentMap.get(a.id);
+              const segB = segmentMap.get(b.id);
+              if (segA && segB) return segA.start_ms - segB.start_ms;
+              return a.index - b.index;
+            });
+            const segA = segmentMap.get(firstSel.id);
+            const segB = segmentMap.get(secondSel.id);
+            const bothPlaced = Boolean(segA && segB);
+
+            return (
+              <div
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--accent)',
+                  borderRadius: 'var(--radius)',
+                  padding: 'var(--space-3)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: 'var(--accent)',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  <Combine size={14} />
+                  <span>Merge 2 Selected Lines</span>
+                </div>
+
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  Combine both lines into one single lyric line and merge their timeline blocks:
+                </div>
+
+                <div
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.15)',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    fontSize: '0.74rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Line #{firstSel.index + 1}: </span>
+                    <strong>"{firstSel.text}"</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Line #{secondSel.index + 1}: </span>
+                    <strong>"{secondSel.text}"</strong>
+                  </div>
+                  <div
+                    style={{
+                      borderTop: '1px solid var(--border)',
+                      paddingTop: '4px',
+                      marginTop: '2px',
+                      color: 'var(--accent)',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-muted)' }}>Merged: </span>
+                    <strong>"{firstSel.text} {secondSel.text}"</strong>
+                  </div>
+                  {bothPlaced && segA && segB && (
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Time Span: {formatTime(Math.min(segA.start_ms, segB.start_ms))} – {formatTime(Math.max(segA.end_ms, segB.end_ms))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (onMergeLines) {
+                      onMergeLines(firstSel.id, secondSel.id);
+                    } else {
+                      onMergeWithNext(firstSel.id);
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '8px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: 'var(--radius)',
+                    background: 'var(--accent)',
+                    color: 'var(--accent-contrast)',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Combine size={14} />
+                  <span>Merge 2 Selected Lines</span>
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Group Nudge Controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>

@@ -184,6 +184,32 @@ audio {
   color: var(--accent-contrast);
 }
 
+/* Sleek DAW-grade horizontal scrollbar for Waveform Canvas */
+.waveform-scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  overscroll-behavior-x: contain;
+}
+
+.waveform-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.waveform-scroll-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+}
+
+.waveform-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+.waveform-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
 /* Nothing animates on load — an entry transition would make the Playwright
  * visibility assertions flaky for no gain. If you add motion, respect this. */
 @media (prefers-reduced-motion: reduce) {

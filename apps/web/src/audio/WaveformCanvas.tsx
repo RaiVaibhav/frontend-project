@@ -27,6 +27,7 @@ export function WaveformCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const needleRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  const lastUserScrollTimeRef = useRef<number>(0);
 
   const [containerWidth, setContainerWidth] = useState(800);
 
@@ -141,19 +142,87 @@ export function WaveformCanvas({
 
       needle.style.transform = `translate3d(${pixelX}px, 0, 0)`;
 
-      // Auto-scroll container to keep playhead in view when zoomed in
+      // Smooth continuous viewport tracking during playback when zoomed in
       if (containerRef.current && totalWidth > containerWidth) {
         const container = containerRef.current;
-        const scrollLeft = container.scrollLeft;
-        const viewportW = container.clientWidth;
-        if (pixelX < scrollLeft || pixelX > scrollLeft + viewportW - 80) {
-          container.scrollLeft = Math.max(0, pixelX - viewportW / 3);
+        const now = performance.now();
+        // Cooldown: only auto-follow if user has not scrolled manually in the last 1800ms
+        const isUserInteracting = now - lastUserScrollTimeRef.current < 1800;
+
+        if (!isUserInteracting) {
+          const viewportW = container.clientWidth;
+          const targetScroll = Math.max(0, pixelX - viewportW * 0.38);
+
+          if (pixelX > viewportW * 0.38 && Math.abs(container.scrollLeft - targetScroll) > 1) {
+            container.scrollLeft = targetScroll;
+          } else if (pixelX < container.scrollLeft) {
+            // Backward seek: jump container back to keep needle visible
+            container.scrollLeft = Math.max(0, pixelX - 40);
+          }
         }
       }
     });
   }, [controller, durationSeconds, totalWidth, containerWidth]);
 
-  // 3. Click and Drag to Seek
+  // Smooth wheel & trackpad horizontal scrolling with momentum friction decay
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let wheelVelocity = 0;
+    let rafId: number | null = null;
+
+    const applyMomentum = () => {
+      if (!containerRef.current) return;
+      if (Math.abs(wheelVelocity) < 0.2) {
+        wheelVelocity = 0;
+        rafId = null;
+        return;
+      }
+      containerRef.current.scrollLeft += wheelVelocity * 0.22;
+      wheelVelocity *= 0.84; // Smooth friction decay
+      rafId = requestAnimationFrame(applyMomentum);
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (container.scrollWidth <= container.clientWidth) return;
+
+      lastUserScrollTimeRef.current = performance.now();
+
+      // If holding shift or using a vertical wheel (which sends deltaY)
+      const isShift = e.shiftKey;
+      const isVerticalWheel = Math.abs(e.deltaY) > Math.abs(e.deltaX);
+
+      if (isShift || isVerticalWheel) {
+        e.preventDefault();
+        const rawDelta = isShift ? (e.deltaX || e.deltaY) : e.deltaY;
+        const multiplier = e.deltaMode === 1 ? 18 : e.deltaMode === 2 ? 100 : 1;
+        const delta = rawDelta * multiplier;
+
+        wheelVelocity += delta;
+        wheelVelocity = Math.max(-120, Math.min(120, wheelVelocity));
+
+        if (!rafId) {
+          rafId = requestAnimationFrame(applyMomentum);
+        }
+      }
+    };
+
+    const handleScroll = () => {
+      lastUserScrollTimeRef.current = performance.now();
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    container.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('scroll', handleScroll);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [totalWidth, containerWidth]);
+
+  // 3. Click and Drag to Seek, with Middle-Click / Alt-Drag Pan support
   const handleSeekFromEvent = useCallback(
     (e: React.MouseEvent<HTMLDivElement> | MouseEvent) => {
       const canvas = canvasRef.current;
@@ -169,8 +238,36 @@ export function WaveformCanvas({
   );
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Only handle primary click
+    // 1. Middle-click (button 1) or Alt+LeftClick for smooth drag-to-pan across the timeline
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      e.preventDefault();
+      const container = containerRef.current;
+      if (!container) return;
+
+      const startX = e.clientX;
+      const startScrollLeft = container.scrollLeft;
+      document.body.style.cursor = 'grabbing';
+
+      const handlePanMove = (moveEvt: MouseEvent) => {
+        lastUserScrollTimeRef.current = performance.now();
+        const dx = moveEvt.clientX - startX;
+        container.scrollLeft = startScrollLeft - dx;
+      };
+
+      const handlePanUp = () => {
+        document.body.style.cursor = '';
+        window.removeEventListener('mousemove', handlePanMove);
+        window.removeEventListener('mouseup', handlePanUp);
+      };
+
+      window.addEventListener('mousemove', handlePanMove);
+      window.addEventListener('mouseup', handlePanUp);
+      return;
+    }
+
+    // 2. Left click: primary seek and scrub
     if (e.button !== 0) return;
+    lastUserScrollTimeRef.current = 0; // Seeking immediately re-engages needle auto-centering
     isDraggingRef.current = true;
     handleSeekFromEvent(e);
 
@@ -214,12 +311,14 @@ export function WaveformCanvas({
   return (
     <div
       ref={containerRef}
+      className="waveform-scroll-container"
       style={{
         position: 'relative',
         width: '100%',
         height: `${height}px`,
         overflowX: 'auto',
         overflowY: 'hidden',
+        overscrollBehaviorX: 'contain',
         background: 'var(--surface)',
         borderRadius: 0,
         border: '1px solid var(--border)',
