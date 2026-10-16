@@ -3,6 +3,7 @@ import {
   findActiveLineId,
   getLineSegmentMap,
   countPlacementStats,
+  getKaraokeContext,
 } from './lyricsUtils';
 import type { LyricLine, AlignmentSegment } from '../types';
 
@@ -40,5 +41,31 @@ describe('lyricsUtils', () => {
     expect(stats.total).toBe(3);
     expect(stats.placed).toBe(2);
     expect(stats.unplaced).toBe(1);
+  });
+
+  describe('getKaraokeContext', () => {
+    it('returns 3-line context when active line is playing', () => {
+      // At 4000ms, line-2 is active. line-1 is prevLine, line-3 is nextLine.
+      const ctx = getKaraokeContext(sampleLines, sampleSegments, 4000);
+      expect(ctx.currentLine?.id).toBe('line-2');
+      expect(ctx.prevLine?.id).toBe('line-1');
+      expect(ctx.nextLine?.id).toBe('line-3');
+    });
+
+    it('returns upcoming line when in gap before singing begins', () => {
+      // At 500ms, intro before line-1 [1000, 3000]
+      const ctx = getKaraokeContext(sampleLines, sampleSegments, 500);
+      expect(ctx.currentLine).toBeNull();
+      expect(ctx.prevLine).toBeNull();
+      expect(ctx.nextLine?.id).toBe('line-1');
+    });
+
+    it('returns previous line when song advances past last segment', () => {
+      // At 6000ms, after line-2 [3500, 5500]
+      const ctx = getKaraokeContext(sampleLines, sampleSegments, 6000);
+      expect(ctx.currentLine).toBeNull();
+      expect(ctx.prevLine?.id).toBe('line-2');
+      expect(ctx.nextLine).toBeNull();
+    });
   });
 });

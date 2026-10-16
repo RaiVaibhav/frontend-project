@@ -9,6 +9,7 @@ import { TimeClock } from "./audio/TimeClock";
 import { useAlignmentStore } from "./store/useAlignmentStore";
 import { LyricsList } from "./lyrics/LyricsList";
 import { SegmentLane } from "./audio/SegmentLane";
+import { KaraokeBanner } from "./lyrics/KaraokeBanner";
 import { getLineIdRange, fitDroppedSegment } from "./audio/segmentUtils";
 
 export default function App() {
@@ -532,6 +533,14 @@ export default function App() {
               </div>
             )}
           </section>
+
+          {/* 3-Line Karaoke Teleprompter Banner matching wireframe */}
+          <KaraokeBanner
+            lines={alignmentState.lines}
+            segments={alignmentState.segments}
+            controller={controller}
+            onSeekToTime={(timeSec) => controller.seek(timeSec)}
+          />
         </div>
       </div>
     </div>

@@ -52,3 +52,50 @@ export function countPlacementStats(
     unplaced: lines.length - placed,
   };
 }
+
+export interface KaraokeContext {
+  prevLine: LyricLine | null;
+  currentLine: LyricLine | null;
+  nextLine: LyricLine | null;
+}
+
+/**
+ * Given the full lyrics list, placed segments, and current playback timestamp (ms),
+ * returns the 3-line karaoke context: previous line, active/current line, and next line.
+ */
+export function getKaraokeContext(
+  lines: LyricLine[],
+  segments: AlignmentSegment[],
+  timeMs: number
+): KaraokeContext {
+  if (lines.length === 0) {
+    return { prevLine: null, currentLine: null, nextLine: null };
+  }
+
+  const activeId = findActiveLineId(segments, timeMs);
+
+  if (activeId) {
+    const idx = lines.findIndex((l) => l.id === activeId);
+    if (idx >= 0) {
+      return {
+        prevLine: idx > 0 ? lines[idx - 1] : null,
+        currentLine: lines[idx],
+        nextLine: idx < lines.length - 1 ? lines[idx + 1] : null,
+      };
+    }
+  }
+
+  // If no line is currently active, find previous and upcoming lines
+  const sorted = [...segments].sort((a, b) => a.start_ms - b.start_ms);
+  const nextSeg = sorted.find((s) => s.start_ms > timeMs);
+  const prevSeg = [...sorted].reverse().find((s) => s.end_ms < timeMs);
+
+  const nextLine = nextSeg ? lines.find((l) => l.id === nextSeg.line_id) ?? null : null;
+  const prevLine = prevSeg ? lines.find((l) => l.id === prevSeg.line_id) ?? null : null;
+
+  return {
+    prevLine,
+    currentLine: null,
+    nextLine,
+  };
+}
