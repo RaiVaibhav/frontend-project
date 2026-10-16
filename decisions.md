@@ -281,6 +281,42 @@ Implemented pure audio downsampling utilities:
 
 - The primary audio visualization displays normalized amplitude bars from 0.0 to 1.0.
 
+---
+
+## Decision 008: Web Audio Decoding Pipeline & Peak In-Memory Cache (Micro-Step 2B)
+
+- **Commit SHA**: `9f20f3377755f1ee5b56574f8a706599b47e5033` (`9f20f33`)
+- **Date**: 2026-10-16
+
+### Context
+
+After implementing pure peak downsampling (Decision 007), the application requires an asynchronous decoding pipeline that converts raw audio file bytes (from a remote HTTP URL or a user-dropped local `File` object) into an uncompressed `AudioBuffer`, processes the stereo channels, and caches the resulting peak arrays so subsequent track switches don't trigger redundant network requests or audio decoding cycles.
+
+### Decision
+
+Implemented [`apps/web/src/audio/decode.ts`](apps/web/src/audio/decode.ts):
+1. **Shared AudioContext Manager** (`getAudioContext`): Lazily instantiates and shares a single `AudioContext` across the application, handling browser autoplay policies (`state === 'suspended' -> resume()`).
+2. **Buffer Decoding Seam** (`decodeAudioBuffer`): Wraps `audioCtx.decodeAudioData` cleanly into a standard Promise.
+3. **Audio Buffer Processing** (`processAudioBuffer`): Unpacks multi-channel data, applies `mergeStereoToMono`, and runs `extractPeaks(monoSamples, targetBarCount)`.
+4. **URL & File Ingestion Seams** (`decodeAudioFromUrl`, `decodeAudioFromFile`): Ingests remote URLs and local dropped files, caching results in an in-memory `Map`.
+5. **Unit Tests with Vitest** ([`apps/web/src/audio/decode.test.ts`](apps/web/src/audio/decode.test.ts)): Verified buffer processing, channel averaging, duration extraction, and cache management.
+
+### Rationale & Trade-offs
+
+- **Zero Duplicate Decoding**: Caching precomputed peaks ensures that zooming the timeline or switching between songs returns instantaneously.
+- **BYOT Ready**: Having both `decodeAudioFromUrl` and `decodeAudioFromFile` satisfies the Bring-Your-Own-Track requirement seamlessly.
+- **Trade-off**: In-memory caching retains lightweight Float32Array peak buffers (800 floats = ~3.2 KB per song), which has negligible RAM overhead while eliminating CPU-intensive re-decoding.
+
+### Alternatives Rejected
+
+- **Creating a new AudioContext per request**: Rejected because browsers enforce strict limits (usually 6 concurrent AudioContext instances) and throw errors if too many are created.
+- **Re-decoding on every zoom level change**: Rejected because downsampling from pre-decoded audio or a fixed high-resolution peak buffer is hundreds of times faster than re-running `decodeAudioData`.
+
+### Assumptions
+
+- The default waveform resolution of 800 peak bars provides ideal visual fidelity across common desktop display widths.
+
+
 
 
 
