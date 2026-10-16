@@ -196,6 +196,7 @@ export function SegmentLane({
         const nextStartMs = nextSeg ? nextSeg.start_ms : Math.round(durationSeconds * 1000);
 
         const handleLeftTrimStart = (e: React.MouseEvent) => {
+          e.stopPropagation();
           document.body.style.cursor = 'ew-resize';
           const initialStart = segment.start_ms;
           startDrag(e, (deltaX) => {
@@ -213,6 +214,7 @@ export function SegmentLane({
         };
 
         const handleRightTrimStart = (e: React.MouseEvent) => {
+          e.stopPropagation();
           document.body.style.cursor = 'ew-resize';
           const initialEnd = segment.end_ms;
           const maxMs = durationSeconds * 1000;
@@ -404,7 +406,6 @@ export function SegmentLane({
               top: '4px',
               left: `${bounds.leftPx}px`,
               width: `${bounds.widthPx}px`,
-              minWidth: '28px',
               height: `${height - 10}px`,
               background: isInterchangeTarget
                 ? 'rgba(99, 185, 140, 0.55)'
@@ -418,8 +419,6 @@ export function SegmentLane({
                 : '1px solid rgba(99, 185, 140, 0.6)',
               borderRadius: 'var(--radius)',
               pointerEvents: 'auto',
-              display: 'flex',
-              alignItems: 'center',
               boxSizing: 'border-box',
               cursor: isBeingDragged ? 'grabbing' : 'grab',
               boxShadow: isInterchangeTarget
@@ -506,47 +505,24 @@ export function SegmentLane({
                 <span>Interchange{activeDrag?.isMulti ? ' Verse' : ''}</span>
               </div>
             )}
-            {/* Left Trim Handle */}
-            <div
-              onMouseDown={handleLeftTrimStart}
-              style={{
-                width: '10px',
-                height: '100%',
-                cursor: 'ew-resize',
-                background: 'rgba(0, 0, 0, 0.18)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-              title="Drag to trim start time"
-            >
-              <div
-                style={{
-                  width: '2px',
-                  height: '20px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.6)',
-                  borderRadius: '1px',
-                }}
-              />
-            </div>
 
-            {/* Center Segment Body (Drag to shift, Click to select) */}
+            {/* Center Segment Body (Spans 100% full width and height, text starts directly at left boundary) */}
             <div
               onMouseDown={handleBodyDragStart}
               style={{
-                flex: 1,
+                width: '100%',
                 height: '100%',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '0 6px',
+                padding: '0 8px',
                 overflow: 'hidden',
                 whiteSpace: 'nowrap',
                 textOverflow: 'ellipsis',
                 fontSize: '0.8rem',
                 color: 'var(--text)',
                 fontWeight: 500,
+                boxSizing: 'border-box',
+                userSelect: 'none',
               }}
             >
               <span
@@ -560,27 +536,62 @@ export function SegmentLane({
               </span>
             </div>
 
-            {/* Right Trim Handle */}
+            {/* Left Trim Handle (Overlay on left edge, zero in-flow layout width) */}
             <div
-              onMouseDown={handleRightTrimStart}
+              onMouseDown={handleLeftTrimStart}
+              className="segment-trim-handle-left"
               style={{
-                width: '10px',
-                height: '100%',
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: '8px',
                 cursor: 'ew-resize',
-                background: 'rgba(0, 0, 0, 0.18)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                flexShrink: 0,
+                zIndex: 5,
+                borderRadius: 'var(--radius) 0 0 var(--radius)',
+              }}
+              title="Drag to trim start time"
+            >
+              <div
+                style={{
+                  width: '2px',
+                  height: '18px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.75)',
+                  borderRadius: '1px',
+                  boxShadow: '0 0 2px rgba(0, 0, 0, 0.5)',
+                }}
+              />
+            </div>
+
+            {/* Right Trim Handle (Overlay on right edge, zero in-flow layout width) */}
+            <div
+              onMouseDown={handleRightTrimStart}
+              className="segment-trim-handle-right"
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: '8px',
+                cursor: 'ew-resize',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 5,
+                borderRadius: '0 var(--radius) var(--radius) 0',
               }}
               title="Drag to trim end time"
             >
               <div
                 style={{
                   width: '2px',
-                  height: '20px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                  height: '18px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.75)',
                   borderRadius: '1px',
+                  boxShadow: '0 0 2px rgba(0, 0, 0, 0.5)',
                 }}
               />
             </div>

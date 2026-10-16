@@ -7,14 +7,15 @@ export interface SegmentBounds {
 
 /**
  * Calculates pixel left and width for a segment block on the timeline.
- * Ensures a generous minimum visible width (72px) so that trim handles (20px total)
- * never squeeze or eclipse the lyric text content.
+ * Calculates pixel left and width for a segment block on the timeline.
+ * With zero-width overlay trim handles, widthPx matches the exact audio time interval.
+ * Uses a compact minimum visible width (8px) only for sub-pixel clips so they remain clickable.
  */
 export function calculateSegmentBounds(
   segment: AlignmentSegment,
   durationSeconds: number,
   totalWidth: number,
-  minBlockWidthPx = 28
+  minBlockWidthPx = 8
 ): SegmentBounds {
   if (durationSeconds <= 0 || totalWidth <= 0) {
     return { leftPx: 0, widthPx: Math.max(1, minBlockWidthPx) };
