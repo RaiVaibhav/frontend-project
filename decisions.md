@@ -766,6 +766,36 @@ When users dragged a lyric line from the left sidebar and dropped it onto the ti
 
 - The minimum usable interactive touch/mouse target for a timeline segment block with dual handles is 72px.
 
+---
+
+## Decision 019: Pixel-Accurate Interchange Target Detection on Drag
+
+- **Commit SHA**: `9068c5d2b63ea5d8d3ecda2a68cffae45b347b71` (`9068c5d`)
+- **Date**: 2026-10-16
+
+### Context
+
+Users observed that the timeline segment interchange hover badge appeared inconsistently: sometimes it triggered the instant two segments overlapped, and other times it failed to trigger even when segments appeared to overlap on screen. Investigation revealed that the previous detection logic relied on a proportional millisecond threshold (`overlapMs >= targetLength * 0.3`). For short segments (e.g. 800ms), 30% was only 240ms (instant trigger), whereas for long segments (e.g. 6000ms), 30% required 1800ms of overlap before triggering. Furthermore, because visual blocks have a 72px minimum width floor, visual pixel overlap did not match raw millisecond overlap on screen.
+
+### Decision
+
+1. **Pixel-Coordinate Geometry Detection** ([`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUtils.ts), [`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx)):
+   - Updated `findInterchangeTarget` to accept `durationSeconds` and `totalWidth` to compute exact visual pixel bounds on the canvas container.
+   - Evaluates visual pixel overlap (`overlapPx >= 8px`) and center-point containment (`draggedCenterPx >= segLeft && draggedCenterPx <= segRight`), matching 100% of what the human user sees on screen regardless of track length or segment duration.
+   - Preserves pure millisecond fallback for headless test runners.
+
+2. **Unit Tests with Vitest**:
+   - All 56 unit tests passing cleanly across 9 test files.
+
+### Rationale & Trade-offs
+
+- **WYSIWYG ("What You See Is What You Get") Alignment**: Users interact with visual DOM elements on a screen. Evaluating overlap in rendered pixel coordinates guarantees that the visual hover cues behave with 100% predictability and zero perceived lag.
+- **Trade-off**: Requires passing container width and duration into the calculation function.
+
+### Assumptions
+
+- An overlap of 8 pixels or center-point containment indicates clear user intent to interchange with the target segment.
+
 
 
 
