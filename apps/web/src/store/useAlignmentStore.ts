@@ -17,6 +17,10 @@ export function useAlignmentStore() {
     dispatch({ type: 'SET_LINES', payload: { lines } });
   }, []);
 
+  const addLine = useCallback((text = 'New lyric line') => {
+    dispatch({ type: 'ADD_LINE', payload: { text } });
+  }, []);
+
   const reorderLines = useCallback((sourceIndex: number, targetIndex: number) => {
     dispatch({ type: 'REORDER_LINES', payload: { sourceIndex, targetIndex } });
   }, []);
@@ -85,6 +89,7 @@ export function useAlignmentStore() {
       canRedo,
       init,
       setLines,
+      addLine,
       reorderLines,
       setSegment,
       deleteSegment,
@@ -105,6 +110,7 @@ export function useAlignmentStore() {
       canRedo,
       init,
       setLines,
+      addLine,
       reorderLines,
       setSegment,
       deleteSegment,

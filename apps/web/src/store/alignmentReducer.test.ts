@@ -159,4 +159,20 @@ describe('alignmentReducer', () => {
     expect(state.lines[2].id).toBe('1');
     expect(state.lines[2].index).toBe(2);
   });
+
+  it('adds a new lyric line and selects it', () => {
+    let state = getLoadedState();
+    expect(state.lines.length).toBe(3);
+
+    state = alignmentReducer(state, {
+      type: 'ADD_LINE',
+      payload: { text: 'Fourth line added' },
+    });
+
+    expect(state.lines.length).toBe(4);
+    expect(state.lines[3].text).toBe('Fourth line added');
+    expect(state.lines[3].index).toBe(3);
+    expect(state.selectedLineIds.has(state.lines[3].id)).toBe(true);
+    expect(state.history.past.length).toBe(1);
+  });
 });

@@ -20,6 +20,7 @@ export interface AlignmentState {
 export type AlignmentAction =
   | { type: 'INIT'; payload: { lines: LyricLine[]; segments: AlignmentSegment[]; version: number } }
   | { type: 'SET_LINES'; payload: { lines: LyricLine[] } }
+  | { type: 'ADD_LINE'; payload: { text?: string } }
   | { type: 'REORDER_LINES'; payload: { sourceIndex: number; targetIndex: number } }
   | { type: 'SET_SEGMENT'; payload: { line_id: string; start_ms: number; end_ms: number; maxDurationMs: number } }
   | { type: 'DELETE_SEGMENT'; payload: { line_id: string } }
@@ -80,6 +81,22 @@ export function alignmentReducer(state: AlignmentState, action: AlignmentAction)
       return {
         ...state,
         lines: action.payload.lines,
+        history,
+      };
+    }
+
+    case 'ADD_LINE': {
+      const history = recordHistory(state);
+      const newLineId = `line-${Date.now()}-${state.lines.length + 1}`;
+      const newLine: LyricLine = {
+        id: newLineId,
+        index: state.lines.length,
+        text: action.payload.text || 'New lyric line',
+      };
+      return {
+        ...state,
+        lines: [...state.lines, newLine],
+        selectedLineIds: new Set([newLineId]),
         history,
       };
     }

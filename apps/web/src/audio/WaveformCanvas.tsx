@@ -9,6 +9,7 @@ export interface WaveformCanvasProps {
   zoom?: number;
   height?: number;
   segmentLaneHeight?: number;
+  onDropLine?: (lineId: string, dropSeconds: number) => void;
   children?: React.ReactNode | ((totalWidth: number) => React.ReactNode);
 }
 
@@ -19,6 +20,7 @@ export function WaveformCanvas({
   zoom = 1,
   height = 190,
   segmentLaneHeight = 50,
+  onDropLine,
   children,
 }: WaveformCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -180,6 +182,25 @@ export function WaveformCanvas({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const lineId = e.dataTransfer.getData('text/plain');
+    const canvas = canvasRef.current;
+    if (!lineId || !canvas || durationSeconds <= 0) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const dropX = e.clientX - rect.left;
+    const dropSeconds = pixelToTime(dropX, totalWidth, durationSeconds);
+    if (onDropLine) {
+      onDropLine(lineId, dropSeconds);
+    }
+  };
+
   return (
     <div
       ref={containerRef}
@@ -195,6 +216,8 @@ export function WaveformCanvas({
         userSelect: 'none',
       }}
       onMouseDown={handleMouseDown}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       <div style={{ position: 'relative', width: `${totalWidth}px`, height: '100%' }}>
         <canvas ref={canvasRef} style={{ display: 'block', cursor: 'pointer' }} />

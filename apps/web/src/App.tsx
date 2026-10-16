@@ -23,6 +23,8 @@ export default function App() {
     canUndo,
     canRedo,
     init,
+    setLines,
+    addLine,
     selectLine,
     setSegment,
     deleteSegment,
@@ -278,6 +280,8 @@ export default function App() {
           onSelectLine={selectLine}
           onDeleteSegment={deleteSegment}
           onSeekToTime={(timeSec) => controller.seek(timeSec)}
+          onSetLines={setLines}
+          onAddLine={addLine}
         />
 
         {/* Right Column: Waveform Timeline & Workspace */}
@@ -336,6 +340,13 @@ export default function App() {
                 controller={controller}
                 height={190}
                 segmentLaneHeight={52}
+                onDropLine={(lineId, dropSeconds) => {
+                  const dropMs = Math.round(dropSeconds * 1000);
+                  const durationMs = Math.round(track.duration_seconds * 1000);
+                  const endMs = Math.min(dropMs + 3500, durationMs);
+                  setSegment(lineId, dropMs, endMs, durationMs);
+                  selectLine(lineId);
+                }}
               >
                 {(totalWidth) => (
                   <SegmentLane
@@ -350,7 +361,7 @@ export default function App() {
                         lineId,
                         startMs,
                         endMs,
-                        Math.round(track.duration_seconds * 1000),
+                        Math.round(track.duration_seconds * 1000)
                       )
                     }
                     onSeekToTime={(timeSec) => controller.seek(timeSec)}
