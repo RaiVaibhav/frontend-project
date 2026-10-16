@@ -955,6 +955,59 @@ The low-fidelity design wireframe specifies a dedicated right-hand precision ins
 
 - Edits made in the inspector commit directly to the central `alignmentReducer` and push snapshots to the undo/redo history.
 
+---
+
+## Decision 024: Transparent Line Merging, 2-Line Multi-Selection Merge, and Smooth Momentum Waveform Scrolling
+
+- **Commit SHA**: `24291ed74ed774c76ed8d3e7dfa7aa2c892bedf7` (`24291ed`)
+- **Date**: 2026-10-16
+
+### Context
+
+Users reported two usability friction points in the editor:
+1. **Ambiguous and Destructive Feeling of "Merge with next line"**:
+   - The Inspector previously displayed a single button labeled `"Merge with next line"` that immediately merged lines with zero visual preview of what text or timestamps would result.
+   - When users selected two segments on the timeline (e.g. via Shift-click or multi-select), the Inspector only provided verse-shift controls with no way to merge the two selected lines.
+2. **Jittery Waveform Horizontal Scrolling**:
+   - During audio playback when zoomed in, the 60fps playhead tracking ticker forcefully overwrote `container.scrollLeft` on every animation frame, violently fighting user attempts to manually scroll or inspect the timeline.
+   - Standard vertical mouse wheels jumped abruptly without interpolation, and trackpad horizontal gestures lacked `overscroll-behavior-x: contain`, risking unwanted browser back/forward history navigation on macOS.
+
+### Decision
+
+1. **Transparent Line Merging with Interactive Previews** ([`apps/web/src/segment/SegmentInspector.tsx`](apps/web/src/segment/SegmentInspector.tsx)):
+   - **Single-Line Mode**: Clicking "Merge with next line" expands an interactive preview card displaying:
+     - Target line index and text (e.g. `Target: "Watching shadows fade away"`).
+     - Resulting combined text (e.g. `Result: "Standing in the doorway Watching shadows fade away"`).
+     - Explicit `[Confirm Merge]` and `[Cancel]` buttons, completely eliminating accidental line loss.
+   - **Multi-Selection Mode (2 lines selected)**:
+     - Prominently displays a dedicated `"Merge 2 Selected Lines"` card in the Inspector whenever exactly 2 lines/segments are selected.
+     - Displays formatted previews of both lines, the resulting merged text, and the merged timestamp span (`[0:04.000 – 0:13.200]`).
+     - Directly calls `onMergeLines(firstId, secondId)` to merge the selected segments in one click.
+
+2. **Atomic `MERGE_LINES` Reducer Action** ([`apps/web/src/store/alignmentReducer.ts`](apps/web/src/store/alignmentReducer.ts), [`apps/web/src/store/useAlignmentStore.ts`](apps/web/src/store/useAlignmentStore.ts)):
+   - Implemented `executeMergeTwoLines` helper:
+     - Automatically resolves chronological ordering (if both lines have segments on the timeline, earliest `start_ms` is placed first; otherwise document index order is respected).
+     - Merges segments into a unified span `[min(start_ms), max(end_ms)]`. If only one line was placed, preserves its segment for the merged line.
+     - Re-indexes all subsequent lines cleanly (`index: idx`) and records a single history snapshot for immediate Undo/Redo.
+   - Added unit tests in [`apps/web/src/store/alignmentReducer.test.ts`](apps/web/src/store/alignmentReducer.test.ts) covering arbitrary ID ordering, placed-unplaced merging, and undo/redo (totaling 62 passing unit tests).
+
+3. **Smooth Waveform Horizontal Scrolling & Non-Interfering Auto-Follow** ([`apps/web/src/audio/WaveformCanvas.tsx`](apps/web/src/audio/WaveformCanvas.tsx), [`apps/web/src/styles.css`](apps/web/src/styles.css)):
+   - **User Cooldown Auto-Follow**: Tracks `lastUserScrollTimeRef`. While audio is playing, if the user scrolls (mouse wheel, trackpad, or scrollbar drag), auto-tracking pauses for a 1.8s cooldown period, preventing the 60fps playhead from fighting the user's hand. Seeking immediately re-engages centering.
+   - **Friction-Damped Momentum Wheel**: Intercepts vertical mouse wheel events and maps them to horizontal translation via RAF velocity damping (`wheelVelocity *= 0.84`), delivering smooth, silky deceleration like native macOS inertia.
+   - **Trackpad Native Support & Navigation Shield**: Added `overscrollBehaviorX: 'contain'` to prevent macOS trackpad history navigation while preserving native two-finger horizontal swipe physics.
+   - **Middle-Click / Alt-Drag Pan**: Pressing Middle Mouse Button (wheel click) or <kbd>Alt</kbd> + Left Click allows free drag-to-pan across the timeline with a `grabbing` cursor.
+   - **Sleek DAW Scrollbar**: Styled `.waveform-scroll-container` with a subtle 6px dark-mode scrollbar with accent hover feedback.
+
+### Rationale & Trade-offs
+
+- **Clarity and Predictability**: Showing exact before/after previews turns a potentially destructive text-and-timing merge operation into a clear, trustworthy experience.
+- **Natural Multi-Selection Workflow**: Users naturally select two items when they want to join them; offering `"Merge 2 Selected Lines"` aligns with standard DAW and video editing paradigms.
+- **Glide Physics**: Using RAF momentum damping for notched mice provides fluid horizontal scrubbing without sacrificing native trackpad performance.
+
+### Assumptions
+
+- Merging lines combines text with a single intervening space and preserves the earliest line's identifier.
+
 
 
 
