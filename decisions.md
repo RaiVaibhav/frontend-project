@@ -678,6 +678,58 @@ Implemented a comprehensive suite of fixes and wireframe enhancements:
 
 - Lyric lines in a song occur sequentially without concurrent overlapping voices on the primary track.
 
+---
+
+## Decision 017: Interchangeable Drag-and-Drop for Timeline Segments and Sidebar Lyrics
+
+- **Commit SHA**: `cb119702fa1fb0c8a66699317578021c97a544ba` (`cb11970`)
+- **Date**: 2026-10-16
+
+### Context
+
+While the non-overlapping constraints implemented in Decision 016 successfully prevented segment collisions, clamping `dragShiftSegment` strictly between immediate neighbors (`prevSegmentEndMs` and `nextSegmentStartMs`) inadvertently locked segments between their neighbors. Users were unable to drag a segment across the timeline past other segments to swap or interchange their positions. In real-world lyric alignment, users frequently need to correct the order of lines by swapping them directly on the timeline or dropping a line onto an existing segment to replace/interchange it.
+
+### Decision
+
+Implemented fully interchangeable drag-and-drop across the timeline and the lyrics sheet:
+
+1. **Atomic State Action `INTERCHANGE_SEGMENTS`** ([`apps/web/src/store/alignmentReducer.ts`](apps/web/src/store/alignmentReducer.ts), [`apps/web/src/store/useAlignmentStore.ts`](apps/web/src/store/useAlignmentStore.ts)):
+   - Swaps timing intervals between two placed segments atomically in a single state transition with full undo/redo support.
+   - If one of the lines is unplaced, cleanly transfers the timing slot to the new line while unplacing the previous one.
+
+2. **Interchange Target Detection** ([`apps/web/src/audio/segmentUtils.ts`](apps/web/src/audio/segmentUtils.ts)):
+   - Implemented `findInterchangeTarget(otherSegments, currentStartMs, currentEndMs)` to detect if the dragged segment's center falls inside another segment or has >= 30% overlap.
+   - Released in open space: clamps smoothly into the available gap using `fitDroppedSegment` with zero overlap.
+
+3. **Interactive Timeline Interchange in `SegmentLane`** ([`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx)):
+   - Enabled free horizontal dragging across the timeline (`[0, durationMs]`) with elevated GPU-accelerated styling (`translate3d`, `z-index: 20`, shadow).
+   - Displayed active visual swap cues on the hovered target: dashed accent outline, highlight glow, and a floating `⇄ Interchange` badge.
+   - On mouse release over a target, instantly swaps their timing slots via `onInterchangeSegments`.
+
+4. **HTML5 Drag-and-Drop Ingestion Interchange** ([`apps/web/src/App.tsx`](apps/web/src/App.tsx), [`apps/web/src/audio/SegmentLane.tsx`](apps/web/src/audio/SegmentLane.tsx)):
+   - Dropping a line from the left sidebar directly onto an existing timeline segment triggers `onInterchangeSegments`, replacing/swapping the lines.
+   - Dropping onto empty waveform canvas space places the line cleanly into the gap.
+
+5. **Sidebar Drag-and-Drop Reordering** ([`apps/web/src/lyrics/LyricsList.tsx`](apps/web/src/lyrics/LyricsList.tsx)):
+   - Added `onDragOver`, `onDragLeave`, and `onDrop` to sidebar line items, calling `reorderLines` to easily interchange and re-sequence lyrics in the sidebar.
+
+6. **Unit Tests with Vitest** ([`apps/web/src/store/alignmentReducer.test.ts`](apps/web/src/store/alignmentReducer.test.ts), [`apps/web/src/audio/segmentUtils.test.ts`](apps/web/src/audio/segmentUtils.test.ts)):
+   - Added unit tests for `INTERCHANGE_SEGMENTS` reducer cases (placed-placed swap, placed-unplaced transfer, undo/redo) and `findInterchangeTarget` overlap detection (totaling 56 passing tests).
+
+### Rationale & Trade-offs
+
+- **Direct Visual Swapping vs. Static Locking**: Allowing free drag across the timeline with proactive target detection provides fluid, responsive feedback while eliminating the frustration of rigid neighbor boundaries.
+- **Atomic Undo**: Recording the interchange as a single history snapshot ensures that pressing <kbd>⌘Z</kbd> reverses the swap in one click rather than leaving half-updated segments.
+- **Trade-off**: Requires distinguishing between center body drag (which allows interchanging) and edge trim drag (which remains clamped to prevent unintentional collisions).
+
+### Alternatives Rejected
+
+- **Allowing overlapping segment blocks without swapping**: Rejected because having two concurrent segments on the same audio stream violates the linear alignment model.
+
+### Assumptions
+
+- When users drop one segment onto another, their intent is to exchange their assigned timing intervals.
+
 
 
 
