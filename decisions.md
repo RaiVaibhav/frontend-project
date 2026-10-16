@@ -208,5 +208,44 @@ Implemented Step 1 of the vertical slice roadmap:
 
 - The minimum segment duration is set to 200ms (`minLengthMs = 200`) to prevent zero-width or unclickable timeline blocks.
 
+---
+
+## Decision 006: Contract-First OpenAPI Specification & Automated Type Generation via `openapi-typescript`
+
+- **Commit SHA**: `a845f0629bc1e43486c9d09c3fb46e10aa2da9c0` (`a845f06`)
+- **Date**: 2026-10-16
+
+### Context
+
+Hand-written TypeScript types for backend endpoints can drift over time and risk subtle regressions when server schemas change. To establish contract fidelity across the `apps/api` and `apps/web` monorepo boundaries, modern frontend engineering relies on an OpenAPI contract paired with automated code generation.
+
+### Decision
+
+Implemented contract-first type synchronization:
+1. **OpenAPI 3.1 Contract** ([`apps/api/openapi.yaml`](apps/api/openapi.yaml)):
+   - Formally documented all endpoints: `GET /api/v1`, `GET /api/v1/track`, `PUT /api/v1/track/alignment`.
+   - Defined strict component schemas for `LyricLine`, `AlignmentSegment`, `AlignmentData`, `TrackPayload`, `PutAlignmentRequest`, `PutAlignmentResponse`, `BadRequestError` (400), and `ConflictError` (409).
+2. **Type Generation via `openapi-typescript`** ([`apps/web/src/api-schema.d.ts`](apps/web/src/api-schema.d.ts)):
+   - Installed `openapi-typescript` (`^7.13.0`) in `apps/web`.
+   - Added npm script `"typegen:api"` in `apps/web/package.json` and root `package.json`.
+3. **Bound Domain Types to Generated Schemas** ([`apps/web/src/types.ts`](apps/web/src/types.ts)):
+   - Re-exported domain models (`LyricLine`, `AlignmentSegment`, `TrackData`, `PutAlignmentPayload`, etc.) directly from `components['schemas']`.
+
+### Rationale & Trade-offs
+
+- **Zero Type Drift**: Any modification to the API contract immediately cascades into compile-time TypeScript errors on the frontend, catching mismatched payloads before runtime.
+- **Self-Documenting API**: Provides an exact, machine-readable specification of the fixture server's behavior, errors, and units.
+- **Trade-off**: Requires running `pnpm typegen:api` if the API schema is modified, though generation executes in under 40ms.
+
+### Alternatives Rejected
+
+- **Manual dual-maintenance of types**: Rejected because manually maintaining matching types in two separate applications leads to drift and silent bugs.
+- **Heavy runtime schema validators (e.g., Zod / tRPC)**: Rejected because introducing full RPC or heavy runtime parsing libraries adds bundle weight and alters the lightweight Node HTTP fixture server unnecessarily.
+
+### Assumptions
+
+- The backend routes in `apps/api/src/server.js` strictly conform to the schemas specified in `apps/api/openapi.yaml`.
+
+
 
 
