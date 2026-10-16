@@ -910,6 +910,52 @@ The low-fidelity design wireframe specifies a live teleprompter readout position
 
 - The teleprompter displays lyrics based on their sequential order in `lines`, synchronizing with timestamps defined in `segments`.
 
+---
+
+## Decision 023: Right-Sidebar Segment Precision Inspector Panel (Micro-Step 3F)
+
+- **Commit SHA**: `d96b460`
+- **Date**: 2026-10-16
+
+### Context
+
+The low-fidelity design wireframe specifies a dedicated right-hand precision inspector panel for the active selection: *"An inspector for the current selection — exact start and end, the resulting duration, and the operations that do not fit naturally into dragging: merge, split, delete."* While mouse-dragging on the waveform is ideal for macro placement, users need millisecond-accurate numerical entry and operations like split, merge, and deletion.
+
+### Decision
+
+1. **SegmentInspector Component** ([`apps/web/src/segment/SegmentInspector.tsx`](apps/web/src/segment/SegmentInspector.tsx)):
+   - **Single-Segment Mode**:
+     - Line header quoting text: e.g. `Line 4: "First line..."` with placement status badge (`Timed` vs `Unplaced`).
+     - Precision inputs: `Start` and `End` timestamps formatted as `M:SS.mmm` with parsing and validation via `parseTimeToMs`.
+     - Calculated duration readout (`4.30s`).
+     - Quick Play Snippet button (`Play` icon): seeks playback directly to the line's start timestamp.
+     - Precision Nudge grid: `[-500ms]`, `[-100ms]`, `[+100ms]`, `[+500ms]` for surgical alignment adjustments.
+     - Operations:
+       - `Merge with next line`: combines current line text with subsequent line, merging their timestamps or creating a unified segment.
+       - `Split segment…`: opens an inline split tool allowing customized two-part text splitting and split timestamp scrubbing.
+       - `Delete timing (Unplace)`: un-places the line while retaining the text in the lyric sheet.
+   - **Multi-Selection Mode**:
+     - Displays total selected line count and placed segment count.
+     - Bulk verse nudge grid: `[-500ms]`, `[-100ms]`, `[+100ms]`, `[+500ms]`, shifting the entire selected verse together while preserving internal spacing.
+   - **Empty State**:
+     - Clean guidance card when no line or segment is selected.
+
+2. **3-Column Studio Layout** ([`apps/web/src/App.tsx`](apps/web/src/App.tsx)):
+   - Updated main grid layout to `minmax(280px, 320px) 1fr minmax(280px, 320px)` with `maxWidth: 1480px`.
+   - Col 1: Lyrics pane (`LyricsList`).
+   - Col 2: Waveform & timeline (`WaveformCanvas`, `SegmentLane`) + Karaoke readout (`KaraokeBanner`).
+   - Col 3: Segment Inspector (`SegmentInspector`).
+
+### Rationale & Trade-offs
+
+- **Direct Numerical Precision**: Trimming handles on a waveform can be constrained by screen resolution or zoom. Providing numeric input fields with `M:SS.mmm` validation ensures users can input exact timestamps down to 1 millisecond.
+- **Unified 3-Column Ergonomics**: Arranging the 4 wireframe regions into 3 persistent desktop columns eliminates modal dialogs and keeps all alignment tools visible at a single glance.
+
+### Assumptions
+
+- Edits made in the inspector commit directly to the central `alignmentReducer` and push snapshots to the undo/redo history.
+
+
 
 
 
