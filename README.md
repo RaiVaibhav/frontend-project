@@ -12,6 +12,11 @@ things done thoughtfully than everything done thinly.
 > because without it we cannot see who decided what, and that is the part we are
 > reading for. Better you hear it now than after the work is done.
 
+> 📖 **Reviewer Notes & Architecture Walkthrough**:
+> - [**NOTES.md**](NOTES.md): A human-to-human walkthrough of the architecture, component seams, velocity tiers, design trade-offs, and gotchas.
+> - [**decisions.md**](decisions.md): Complete chronological decision log recording all 29 engineering decisions with context, rationale, and commit hashes.
+
+
 ---
 
 ## Running it
